@@ -12,7 +12,8 @@ Scores a posting 0-100 against a candidate profile JSON:
 
 The profile is plain JSON (see ``examples/``); pass ``--profile`` to use
 your own. Role relevance tiers come from the profile's ``role_tiers``
-(tier1/tier2/tier3 keyword lists) so the scorer works for any profession.
+(tier1/tier2/tier3 keyword lists) so the scorer works for any profession;
+profiles without ``role_tiers`` fall back to security-role defaults.
 Nothing personal is bundled.
 """
 
@@ -42,21 +43,24 @@ DEFAULT_ROLE_TIERS = {
 
 
 def _tier_regex(profile: dict, tier: str) -> re.Pattern | None:
-    keywords = (profile.get("role_tiers") or {}).get(tier) \
-        or DEFAULT_ROLE_TIERS[tier]
+    tiers = profile.get("role_tiers")
+    if tiers is None:  # no role_tiers key: security-role defaults
+        keywords = DEFAULT_ROLE_TIERS[tier]
+    else:  # explicit (possibly empty) keyword lists: honor them
+        keywords = tiers.get(tier) or []
     if not keywords:
         return None
     return re.compile("|".join(re.escape(k) for k in keywords), re.I)
 
 def load_profile(path: str | None) -> dict:
-    """Load a candidate profile JSON file (or the bundled example)."""
+    """Load a candidate profile JSON file (or the neutral template)."""
     if path:
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     import os
-    example = os.path.join(os.path.dirname(__file__), "..", "..",
-                           "examples", "profile.example.json")
-    with open(os.path.normpath(example), encoding="utf-8") as fh:
+    template = os.path.join(os.path.dirname(__file__), "..", "..",
+                            "examples", "template.json")
+    with open(os.path.normpath(template), encoding="utf-8") as fh:
         return json.load(fh)
 
 

@@ -24,3 +24,6 @@ scrape-*.json
 scrape-*.md
 scores.csv
 *.log
+
+# CI workflow is managed via the GitHub web UI (OAuth token lacks workflow scope)
+.github/workflows/

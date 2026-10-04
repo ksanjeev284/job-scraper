@@ -51,13 +51,17 @@ jobscraper --linkedin "data analyst" --location "Mumbai, India" --days 14 --limi
 
 # enumerate a whole career portal, then scrape every posting
 jobscraper --discover lever:spotify --discover ashby:acme --limit 50
+
+# any profession, any location: filter and re-target per run
+jobscraper --linkedin "data analyst" --location "Mumbai, India" \
+  --profile examples/data-analyst.json --location-filter mumbai
 ```
 
 Outputs: `results.json` (full structured data), `report.md` (ranked summary + per-posting detail), `scores.csv` (spreadsheet).
 
 ### Candidate profile
 
-Copy one of the examples in `examples/` (`profile.example.json` for security, `profile.software-engineer.json`, `profile.data-analyst.json`) to `my-profile.json` and edit it: skills, years of experience, certs, preferred locations, current CTC, role tiers, and `custom_skills` (extra skill keywords the built-in vocabulary doesn't cover). Scoring runs against this profile; nothing personal ships with the repo.
+Pick the closest starting point in `examples/` (`security-engineer.json`, `software-engineer.json`, `data-analyst.json`) or start blank from `template.json`, copy it to `my-profile.json`, and fill in your skills, years of experience, certs, preferred locations, current CTC, role tiers (`tier1`/`tier2`/`tier3` keyword lists that define what counts as a strong role match for *your* field), and `custom_skills` (extra skill keywords the built-in vocabulary doesn't cover). Scoring runs against this profile; nothing personal ships with the repo. With no `--profile`, a neutral template is used.
 
 ### Options
 
@@ -71,6 +75,9 @@ Copy one of the examples in `examples/` (`profile.example.json` for security, `p
 | `--days N` | only LinkedIn postings from the last N days |
 | `--remote MODE` | `onsite` / `remote` / `hybrid` filter for `--linkedin` |
 | `--discover BOARD:ID` | enumerate a career portal (repeatable; see below) |
+| `--locations "A,B"` | preferred locations for this run (overrides profile) |
+| `--location-filter TEXT` | keep only postings whose location contains TEXT |
+| `--keyword-filter "A,B"` | keep only postings whose title contains a keyword |
 | `--out PATH` | JSON output path |
 | `--md PATH` | Markdown report path |
 | `--csv PATH` | CSV export path |

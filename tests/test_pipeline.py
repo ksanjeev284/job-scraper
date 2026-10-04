@@ -1,7 +1,12 @@
 """Dedupe keys and applied-tracker checks."""
 
 from jobscraper.models import Posting
-from jobscraper.pipeline import check_tracker, dedupe_key, dedupe_results
+from jobscraper.pipeline import (
+    apply_filters,
+    check_tracker,
+    dedupe_key,
+    dedupe_results,
+)
 
 
 def _post(company, title, score=50, error=None):
@@ -50,3 +55,33 @@ def test_check_tracker_finds_url(tmp_path):
 
 def test_check_tracker_missing_file():
     assert check_tracker(_post("Acme", "X"), "/no/such/file.md") is None
+
+
+def test_apply_filters_location():
+    hyd = _post("Acme", "Engineer")
+    hyd.location = "Hyderabad, India"
+    blr = _post("Globex", "Engineer")
+    blr.location = "Bengaluru, India"
+    kept = apply_filters([hyd, blr], location_filter="hyderabad")
+    assert kept == [hyd]
+
+
+def test_apply_filters_keywords():
+    analyst = _post("Acme", "Data Analyst")
+    engineer = _post("Globex", "Data Engineer")
+    kept = apply_filters([analyst, engineer],
+                         keyword_filter="analyst, scientist")
+    assert kept == [analyst]
+
+
+def test_apply_filters_keeps_errors():
+    bad = _post("Acme", "Engineer", error="fetch failed")
+    bad.location = "Nowhere"
+    kept = apply_filters([bad], location_filter="hyderabad",
+                         keyword_filter="analyst")
+    assert kept == [bad]
+
+
+def test_apply_filters_no_filters_keeps_all():
+    posts = [_post("Acme", "Engineer"), _post("Globex", "Analyst")]
+    assert apply_filters(posts) == posts

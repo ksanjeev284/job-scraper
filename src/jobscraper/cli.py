@@ -8,7 +8,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-from jobscraper.pipeline import dedupe_results, process_url
+from jobscraper.pipeline import apply_filters, dedupe_results, process_url
 from jobscraper.reporting import write_csv, write_markdown
 from jobscraper.scoring import load_profile
 
@@ -60,6 +60,18 @@ def build_parser() -> argparse.ArgumentParser:
                              "career portal, e.g. --discover lever:spotify "
                              "--discover workday:acme:wd3:acme_ext "
                              "(repeatable)")
+    parser.add_argument("--locations", default=None, metavar="\"A,B\"",
+                        help="Comma-separated preferred locations for this "
+                             "run; overrides the profile's locations in "
+                             "scoring, e.g. --locations \"Pune,Remote\"")
+    parser.add_argument("--location-filter", default=None, metavar="TEXT",
+                        help="Keep only postings whose location contains "
+                             "TEXT (case-insensitive), e.g. "
+                             "--location-filter hyderabad")
+    parser.add_argument("--keyword-filter", default=None, metavar="\"A,B\"",
+                        help="Keep only postings whose title contains one of "
+                             "these comma-separated keywords, e.g. "
+                             "--keyword-filter \"analyst,engineer\"")
     return parser
 
 
@@ -117,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     profile = load_profile(args.profile)
+    if args.locations:
+        profile["locations"] = [loc.strip() for loc in
+                                args.locations.split(",") if loc.strip()]
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     out = args.out or f"scrape-{stamp}.json"
@@ -148,6 +163,13 @@ def main(argv: list[str] | None = None) -> int:
         dropped = before - sum(1 for p in results if not p.error)
         if dropped:
             print(f"Deduped {dropped} cross-board duplicate(s)")
+
+    if args.location_filter or args.keyword_filter:
+        before = len(results)
+        results = apply_filters(results, args.location_filter,
+                                args.keyword_filter)
+        print(f"Filtered {before - len(results)} posting(s) "
+              f"out by location/keyword filters")
 
     with open(out, "w", encoding="utf-8") as fh:
         json.dump([p.to_dict() for p in results], fh, indent=2,

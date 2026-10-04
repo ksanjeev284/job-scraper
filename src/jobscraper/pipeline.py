@@ -82,6 +82,30 @@ def dedupe_results(posts: list[Posting]) -> list[Posting]:
             if p.error or id(p) in kept]
 
 
+def apply_filters(posts: list[Posting],
+                  location_filter: str | None = None,
+                  keyword_filter: str | None = None) -> list[Posting]:
+    """Keep postings matching the location substring and/or title keywords.
+
+    ``keyword_filter`` is a comma-separated list; a posting is kept when its
+    title contains any of them (case-insensitive). Errored postings are
+    always kept so failures stay visible.
+    """
+    keywords = [k.strip().lower() for k in (keyword_filter or "").split(",")
+                if k.strip()]
+    loc_filter = (location_filter or "").lower()
+
+    def keep(post: Posting) -> bool:
+        if post.error:
+            return True
+        if loc_filter and loc_filter not in (post.location or "").lower():
+            return False
+        return not keywords or any(k in (post.title or "").lower()
+                                   for k in keywords)
+
+    return [p for p in posts if keep(p)]
+
+
 def process_url(url: str, use_cache: bool = True,
                 profile: dict | None = None,
                 tracker_path: str | None = None,

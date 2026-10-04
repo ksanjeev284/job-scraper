@@ -104,3 +104,14 @@ def test_custom_skills_extend_vocab():
     assert "Next.js" in find_skills("We use Next.js daily.",
                                     ("Next.js",))
     assert "Next.js" not in find_skills("We use Next.js daily.")
+
+
+def test_template_profile_scores_neutrally():
+    profile = load_profile(None)  # neutral template
+    assert profile["role_tiers"] == {"tier1": [], "tier2": [], "tier3": []}
+    post = _posting(title="Backend Engineer")
+    post.location = "Berlin"
+    match = score_posting(post, profile)
+    assert match.breakdown["role_relevance"] == 2  # no tiers configured
+    assert match.breakdown["location"] == 3  # no locations configured
+    assert 0 <= match.total <= 100
