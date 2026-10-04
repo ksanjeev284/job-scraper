@@ -118,9 +118,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "webhook URL (repeatable); see README for "
                              "Slack/Discord/Google Sheets/Notion recipes")
     parser.add_argument("--webhook-mode", default="plain",
-                        choices=["plain", "slack", "discord"],
+                        choices=["plain", "slack", "discord", "pushover"],
                         help="Webhook payload format (default plain; "
-                             "slack/discord send a chat notification)")
+                             "slack/discord send a chat notification; "
+                             "pushover sends a phone-push alert)")
+    parser.add_argument("--pushover-token", default=None, metavar="TOKEN",
+                        help="Pushover application token for --webhook-mode "
+                             "pushover (or JOBSCRAPER_PUSHOVER_TOKEN)")
+    parser.add_argument("--pushover-user", default=None, metavar="KEY",
+                        help="Pushover user key for --webhook-mode pushover "
+                             "(or JOBSCRAPER_PUSHOVER_USER)")
     parser.add_argument("--webhook-only-new", action="store_true",
                         help="With --watch, only notify about postings "
                              "flagged new since the last run "
@@ -315,9 +322,26 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"XLSX: {args.excel}")
 
-    from jobscraper.notify import deliver, webhook_urls_from_env
+    from jobscraper.notify import deliver, send_pushover, webhook_urls_from_env
+    if args.webhook_mode == "pushover":
+        # Phone-push channel: posts to the fixed Pushover endpoint;
+        # --webhook-url is ignored in this mode.
+        try:
+            ok, detail = send_pushover(
+                results, token=args.pushover_token, user=args.pushover_user,
+                only_new=args.webhook_only_new, top=args.webhook_top)
+        except ValueError as exc:
+            print(f"Pushover: {exc}", file=sys.stderr)
+            return 1
+        if ok is None:
+            print(f"Pushover: skipped ({detail})")
+        elif ok:
+            print(f"Pushover: {detail}")
+        else:
+            print(f"Pushover FAILED: {detail}", file=sys.stderr)
+            return 1
     webhook_urls = list(args.webhook_url) + webhook_urls_from_env()
-    if webhook_urls:
+    if webhook_urls and args.webhook_mode != "pushover":
         seen, deduped = set(), []
         for url in webhook_urls:
             if url not in seen:

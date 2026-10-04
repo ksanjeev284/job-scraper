@@ -11,8 +11,11 @@ import pytest
 from jobscraper.models import MatchResult, Posting
 from jobscraper.notify import (
     build_payload,
+    build_pushover_payload,
     deliver,
     host_of,
+    pushover_credentials,
+    send_pushover,
     send_webhook,
     webhook_urls_from_env,
 )
@@ -125,11 +128,15 @@ def test_send_webhook_rejects_non_http():
 
 class _Capture(BaseHTTPRequestHandler):
     received: list[bytes] = []
+    content_types: list[str] = []
+    status: int = 200
 
     def do_POST(self):  # noqa: N802
         length = int(self.headers.get("Content-Length", "0"))
         _Capture.received.append(self.rfile.read(length))
-        self.send_response(200)
+        _Capture.content_types.append(
+            self.headers.get("Content-Type", ""))
+        self.send_response(_Capture.status)
         self.end_headers()
 
     def log_message(self, *args):  # noqa: ANN002, ANN202
@@ -189,3 +196,125 @@ def test_webhook_urls_from_env(monkeypatch):
         "https://a.example.com/hook/1", "https://b.example.com/hook/2"]
     monkeypatch.delenv("JOBSCRAPER_WEBHOOK_URL")
     assert webhook_urls_from_env() == []
+
+
+# --- Pushover phone-push channel -------------------------------------------
+
+
+def _pushover_posts() -> list[Posting]:
+    return [_posting("analyst", 80, is_new=True), _posting("dev", 40)]
+
+
+def test_pushover_payload_fields_and_ranking():
+    payload = build_pushover_payload(_pushover_posts(), token="tok",
+                                     user="usr")
+    assert payload is not None
+    assert payload["token"] == "tok"
+    assert payload["user"] == "usr"
+    assert payload["priority"] == 0
+    assert "1 new" in payload["title"]
+    # ranked: analyst (80) before dev (40); top post attached as URL
+    assert payload["message"].splitlines()[0].startswith("analyst -")
+    assert "[NEW]" in payload["message"]
+    assert payload["url"] == "https://example.com/jobs/analyst"
+    assert payload["url_title"] == "Open top posting"
+
+
+def test_pushover_only_new_filters():
+    posts = [_posting("old", 90), _posting("fresh", 50, is_new=True)]
+    payload = build_pushover_payload(posts, token="t", user="u",
+                                     only_new=True)
+    assert payload is not None
+    assert "fresh -" in payload["message"]
+    assert "old -" not in payload["message"]
+
+
+def test_pushover_only_new_nothing_new_returns_none():
+    assert (build_pushover_payload([_posting("old", 90)], token="t",
+                                   user="u", only_new=True) is None)
+
+
+def test_pushover_message_capped_at_limit():
+    posts = [_posting(f"job{i} with a fairly long descriptive title", i)
+             for i in range(60)]
+    payload = build_pushover_payload(posts, token="t", user="u")
+    assert payload is not None
+    assert len(payload["message"]) <= 1024
+
+
+def test_pushover_credentials_from_env(monkeypatch):
+    monkeypatch.setenv("JOBSCRAPER_PUSHOVER_TOKEN", "tok123")
+    monkeypatch.setenv("JOBSCRAPER_PUSHOVER_USER", "usr456")
+    assert pushover_credentials() == ("tok123", "usr456")
+    # explicit args win over the environment
+    assert pushover_credentials(token="x", user="y") == ("x", "y")
+
+
+def test_pushover_credentials_missing_raises(monkeypatch):
+    monkeypatch.delenv("JOBSCRAPER_PUSHOVER_TOKEN", raising=False)
+    monkeypatch.delenv("JOBSCRAPER_PUSHOVER_USER", raising=False)
+    with pytest.raises(ValueError, match="JOBSCRAPER_PUSHOVER_TOKEN"):
+        pushover_credentials()
+    with pytest.raises(ValueError):
+        send_pushover(_pushover_posts())
+
+
+def test_send_pushover_posts_form_encoded(monkeypatch):
+    _Capture.received.clear()
+    _Capture.content_types.clear()
+    server, thread = _serve()
+    try:
+        monkeypatch.setattr(
+            "jobscraper.notify._PUSHOVER_ENDPOINT",
+            f"http://127.0.0.1:{server.server_port}/1/messages.json")
+        ok, detail = send_pushover(_pushover_posts(), token="tok",
+                                   user="usr")
+        assert ok, detail
+        assert "127.0.0.1" in detail
+        assert "tok" not in detail and "usr" not in detail
+        assert len(_Capture.received) == 1
+        assert (_Capture.content_types[0]
+                == "application/x-www-form-urlencoded")
+        fields = dict(pair.split("=", 1)
+                      for pair in _Capture.received[0].decode().split("&"))
+        assert fields["token"] == "tok"
+        assert fields["user"] == "usr"
+        assert "analyst" in fields["message"]
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_send_pushover_server_error_returns_false(monkeypatch):
+    _Capture.status = 400
+    server, thread = _serve()
+    try:
+        monkeypatch.setattr(
+            "jobscraper.notify._PUSHOVER_ENDPOINT",
+            f"http://127.0.0.1:{server.server_port}/1/messages.json")
+        ok, detail = send_pushover(_pushover_posts(), token="t",
+                                   user="u")
+        assert not ok
+        assert "HTTP 400" in detail
+    finally:
+        _Capture.status = 200
+        server.shutdown()
+        thread.join()
+
+
+def test_send_pushover_skips_when_nothing_new():
+    ok, detail = send_pushover([_posting("old", 90)], token="t",
+                               user="u", only_new=True)
+    assert ok is None
+    assert "no new postings" in detail
+
+
+def test_cli_offers_pushover_webhook_mode():
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "jobscraper", "--help"],
+        capture_output=True, text=True, timeout=30, cwd=".")
+    assert proc.returncode == 0
+    assert "pushover" in proc.stdout

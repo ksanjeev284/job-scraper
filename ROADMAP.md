@@ -39,3 +39,4 @@ Planned improvements, in rough priority order.
 - [x] HTML report option (self-contained, XSS-safe)
 - [x] Excel (.xlsx) export — ranked sheet, score bands, autofilter, clickable URLs, formula-injection neutralization (optional openpyxl extra)
 - [x] Notion / Google Sheets export hooks (`--webhook-url` with `plain` JSON payload; README documents the Sheets Apps Script receiver and Notion bridge recipes; `slack`/`discord` notification modes)
+- [x] Pushover phone-push notifications (`--webhook-mode pushover`; credentials via `JOBSCRAPER_PUSHOVER_TOKEN`/`JOBSCRAPER_PUSHOVER_USER` or `--pushover-token`/`--pushover-user`; one message per run with the top posting attached, 1024-char cap; credentials never logged)

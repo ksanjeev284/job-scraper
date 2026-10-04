@@ -23,7 +23,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **URL canonicalization** — tracking parameters (`utm_*`, `trk`, `gclid`, …), fragments, host-case variants and trailing slashes are stripped before fetching, so the same posting shared from different sources is fetched once and reported under one clean URL; the applied-tracker check matches across those variants too
 - **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML and Excel outputs
 - **Excel export** — `--excel results.xlsx` writes the ranked spreadsheet: score-colored cells, frozen header with autofilter, clickable posting URLs, formula-injection neutralized (needs `pip install -e ".[excel]"`)
-- **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications (see below)
+- **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` sends a phone-push alert instead (see below)
 
 ## Web GUI
 
@@ -175,6 +175,11 @@ jobscraper --urls urls.txt --watch state.json --webhook-only-new \
   --webhook-url https://discord.com/api/webhooks/123/secret \
   --webhook-mode discord --webhook-top 10
 
+# Phone-push alert instead of a chat message (needs Pushover credentials;
+# --webhook-url is ignored in this mode)
+jobscraper --urls urls.txt --watch state.json --webhook-only-new \
+  --webhook-mode pushover
+
 # Watch mode also tracks closures: postings seen in a previous run that
 # disappear are reported as "closed since last run" (fetch errors are
 # never treated as closures; a posting that reappears is reopened).
@@ -185,6 +190,13 @@ jobscraper --urls urls.txt --watch state.json
   `tool`, `generated_at`, `total`, `new`, and the ranked `postings`.
 - `--webhook-mode slack` sends a Block Kit message; `--webhook-mode discord`
   sends an embed message (max 10 embeds; longer lists are truncated).
+- `--webhook-mode pushover` sends one phone-push message per run via the
+  Pushover API (https://pushover.net/api): ranked postings as lines,
+  the top posting attached as the tappable URL, message capped at the
+  1024-character API limit. It needs a Pushover application token and
+  user key from `JOBSCRAPER_PUSHOVER_TOKEN` / `JOBSCRAPER_PUSHOVER_USER`
+  (or `--pushover-token` / `--pushover-user`); `--webhook-url` is
+  ignored in this mode. Credentials are never logged.
 - `--webhook-only-new` skips the POST entirely when watch mode finds nothing
   new. `--webhook-top N` caps the postings included (default 25).
 - Webhook URLs carry secrets in their path: only the host is ever logged.
