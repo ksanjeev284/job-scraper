@@ -1,10 +1,11 @@
-"""Report writers: ranked Markdown, CSV, HTML, Excel, and RSS exports."""
+"""Report writers: ranked Markdown, CSV, HTML, Excel, RSS, JSONL, SQLite."""
 
 from __future__ import annotations
 
 import csv
 import html as html_lib
 import json
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 
@@ -506,3 +507,125 @@ def write_jsonl(posts: list[Posting], path: str, profile: dict) -> None:
             record = {"rank": rank}
             record.update(post.to_dict())
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+_SQLITE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS postings (
+    url TEXT PRIMARY KEY,
+    title TEXT,
+    company TEXT,
+    location TEXT,
+    employment_type TEXT,
+    seniority TEXT,
+    age_days INTEGER,
+    score INTEGER,
+    last_rank INTEGER,
+    live INTEGER,
+    salary TEXT,
+    matched_skills TEXT,
+    skill_gaps TEXT,
+    fit_summary TEXT,
+    benefits TEXT,
+    description_chars INTEGER,
+    is_new INTEGER,
+    tracker_status TEXT,
+    error TEXT,
+    first_seen TEXT,
+    last_seen TEXT,
+    scrape_count INTEGER NOT NULL DEFAULT 1,
+    raw_json TEXT
+)
+"""
+
+_SQLITE_UPSERT = """
+INSERT INTO postings (
+    url, title, company, location, employment_type, seniority, age_days,
+    score, last_rank, live, salary, matched_skills, skill_gaps,
+    fit_summary, benefits, description_chars, is_new, tracker_status,
+    error, first_seen, last_seen, scrape_count, raw_json
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?
+)
+ON CONFLICT(url) DO UPDATE SET
+    title=excluded.title,
+    company=excluded.company,
+    location=excluded.location,
+    employment_type=excluded.employment_type,
+    seniority=excluded.seniority,
+    age_days=excluded.age_days,
+    score=excluded.score,
+    last_rank=excluded.last_rank,
+    live=excluded.live,
+    salary=excluded.salary,
+    matched_skills=excluded.matched_skills,
+    skill_gaps=excluded.skill_gaps,
+    fit_summary=excluded.fit_summary,
+    benefits=excluded.benefits,
+    description_chars=excluded.description_chars,
+    is_new=excluded.is_new,
+    tracker_status=excluded.tracker_status,
+    error=excluded.error,
+    last_seen=excluded.last_seen,
+    scrape_count=postings.scrape_count + 1,
+    raw_json=excluded.raw_json
+"""
+
+
+def _sqlite_row(post: Posting, rank: int, now: str,
+                profile: dict) -> tuple:
+    """Flatten one posting into a sqlite3 parameter tuple (best-first rank)."""
+    match = post.match
+    live = 1 if post.is_live else (0 if post.is_live is False else None)
+    return (
+        post.url,
+        post.title,
+        post.company,
+        post.location,
+        post.employment_type,
+        post.seniority,
+        post.age_days,
+        match.total if match else None,
+        rank,
+        live,
+        "; ".join(post.salary_hits),
+        json.dumps(match.matched_skills if match else [],
+                   ensure_ascii=False),
+        json.dumps(match.skill_gaps if match else [],
+                   ensure_ascii=False),
+        "; ".join(fit_summary(post, profile)),
+        "; ".join(s.heading for s in post.benefits),
+        post.full_text_chars,
+        1 if post.is_new else 0,
+        post.tracker_status,
+        post.error,
+        now,
+        now,
+        json.dumps(post.to_dict(), ensure_ascii=False),
+    )
+
+
+def write_sqlite(posts: list[Posting], path: str, profile: dict) -> None:
+    """Store the ranked results in a SQLite database (stdlib, no extras).
+
+    Each posting is one row keyed by canonical URL. Re-running against the
+    same database upserts instead of duplicating: ``first_seen`` keeps the
+    original timestamp, ``last_seen`` advances, and ``scrape_count``
+    increments, so the database becomes a queryable history across runs::
+
+        SELECT title, company, score FROM postings
+        WHERE live = 1 ORDER BY score DESC;
+
+    ``score`` and ``last_rank`` reflect the most recent run (rank is 1-based,
+    best score first, unscored postings last). List-valued fields are stored
+    as JSON text; the full record lands in ``raw_json`` for ad-hoc queries.
+    """
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(_SQLITE_SCHEMA)
+        rows = [_sqlite_row(post, rank, now, profile)
+                for rank, post in enumerate(_export_order(posts), start=1)]
+        conn.executemany(_SQLITE_UPSERT, rows)
+        conn.commit()
+    finally:
+        conn.close()

@@ -14,6 +14,7 @@ from jobscraper.reporting import (
     write_jsonl,
     write_markdown,
     write_rss,
+    write_sqlite,
     write_xlsx,
 )
 from jobscraper.scoring import load_profile, validate_profile
@@ -47,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--jsonl", default=None,
                         help="JSON Lines export path: one full posting "
                              "record per line, ranked by match score")
+    parser.add_argument("--sqlite", default=None,
+                        help="SQLite database path: ranked postings upserted "
+                             "by URL so runs accumulate a queryable history")
     parser.add_argument("--no-cache", action="store_true",
                         help="Ignore the local page cache and refetch")
     parser.add_argument("--workers", type=int, default=4,
@@ -382,6 +386,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.jsonl:
         write_jsonl(results, args.jsonl, profile)
         print(f"JSONL: {args.jsonl}")
+    if args.sqlite:
+        write_sqlite(results, args.sqlite, profile)
+        print(f"SQLite: {args.sqlite}")
 
     from jobscraper.notify import (
         deliver,

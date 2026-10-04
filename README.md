@@ -22,10 +22,11 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Seniority inference** — every posting gets an explicit level (`intern` / `entry` / `mid` / `senior` / `staff` / `lead` / `manager` / `director` / `executive` / `unknown`) with match evidence, from title markers first, then description signals, then required-experience bands; `--seniority senior,staff` filters runs by level, and the level shows in CSV/Excel/HTML exports
 - **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; skips URLs already marked applied in your tracker file
 - **URL canonicalization** — tracking parameters (`utm_*`, `trk`, `gclid`, …), fragments, host-case variants and trailing slashes are stripped before fetching, so the same posting shared from different sources is fetched once and reported under one clean URL; the applied-tracker check matches across those variants too
-- **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML, Excel, JSONL and RSS outputs
+- **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML, Excel, JSONL, RSS and SQLite outputs
 - **Excel export** — `--excel results.xlsx` writes the ranked spreadsheet: score-colored cells, frozen header with autofilter, clickable posting URLs, formula-injection neutralized (needs `pip install -e ".[excel]"`)
 - **RSS feed export** — `--rss feed.xml` writes the ranked results as an RSS 2.0 feed for feed readers: match scores in item titles, fit summaries in the bodies, posting-age `pubDate`, watch-mode newcomers tagged `new`
 - **JSONL export** — `--jsonl results.jsonl` writes one full posting record per line, ranked best-first: streams through `jq` and `grep`, appends cleanly across runs (`>>`)
+- **SQLite export** — `--sqlite jobs.db` upserts the ranked results by canonical URL (no new dependencies): `first_seen` keeps the original timestamp, `last_seen` advances and `scrape_count` increments on every re-run, so the database becomes a queryable history across runs (`SELECT title, company, score FROM postings WHERE live = 1 ORDER BY score DESC`); list fields stored as JSON text, full record in `raw_json`
 - **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` / `--webhook-mode telegram` send a phone alert instead (see below)
 
 ## Web GUI
@@ -81,7 +82,7 @@ jobscraper --linkedin "data analyst" --location "Mumbai, India" \
   --profile examples/data-analyst.json --location-filter mumbai
 ```
 
-Outputs: `results.json` (full structured data), `report.md` (ranked summary + per-posting detail), `scores.csv` (spreadsheet), `report.html` (self-contained ranked HTML report with score breakdowns, inline CSS, no external assets; every scraped field is HTML-escaped so the report is safe to open in a browser), `feed.xml` (RSS 2.0 feed of the ranked results for feed readers), `results.jsonl` (one full posting record per line, ranked best-first, for `jq` pipelines).
+Outputs: `results.json` (full structured data), `report.md` (ranked summary + per-posting detail), `scores.csv` (spreadsheet), `report.html` (self-contained ranked HTML report with score breakdowns, inline CSS, no external assets; every scraped field is HTML-escaped so the report is safe to open in a browser), `feed.xml` (RSS 2.0 feed of the ranked results for feed readers), `results.jsonl` (one full posting record per line, ranked best-first, for `jq` pipelines), `jobs.db` (SQLite: ranked postings upserted by URL, a queryable history across runs).
 
 ### Candidate profile
 
@@ -116,6 +117,7 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--html PATH` | HTML report path |
 | `--rss PATH` | RSS 2.0 feed export path |
 | `--jsonl PATH` | JSON Lines export path: one full posting record per line, ranked by match score |
+| `--sqlite PATH` | SQLite database path: ranked postings upserted by URL, a queryable history across runs |
 | `--profile PATH` | candidate profile JSON for scoring |
 | `--no-score` | skip match scoring |
 | `--tracker PATH` | tracker file: postings whose URL appears are marked `applied` |
