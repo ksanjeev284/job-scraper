@@ -131,6 +131,7 @@
       <div><label>Minimum score</label><input type="number" id="opt-minscore" placeholder="65" min="0" max="100"></div>
       <div><label>Min salary</label><input type="text" id="opt-minsalary" placeholder="80K USD"></div>
       <div><label>Max salary</label><input type="text" id="opt-maxsalary" placeholder="200K USD"></div>
+      <div><label>Max posting age (days)</label><input type="number" id="opt-maxage" placeholder="7" min="0"></div>
       <div><label>Exclude companies</label><input type="text" id="opt-excomp" placeholder="tcs, infosys"></div>
       <div><label>Exclude keywords</label><input type="text" id="opt-exkw" placeholder="intern, trainee"></div>
       <div><label>Workers</label><input type="number" id="opt-workers" value="4" min="1" max="16"></div>
@@ -188,6 +189,7 @@ $('runBtn').onclick = async () => {
     min_score: $('opt-minscore').value === '' ? null : parseInt($('opt-minscore').value),
     salary_min: $('opt-minsalary').value.trim() || null,
     salary_max: $('opt-maxsalary').value.trim() || null,
+    max_age: $('opt-maxage').value === '' ? null : parseInt($('opt-maxage').value),
     exclude_companies: $('opt-excomp').value.trim() || null,
     exclude_keywords: $('opt-exkw').value.trim() || null,
     workers: parseInt($('opt-workers').value) || 4,

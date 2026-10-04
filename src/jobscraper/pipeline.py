@@ -118,6 +118,7 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  seniority: str | None = None,
                  salary_min: str | None = None,
                  salary_max: str | None = None,
+                 max_age: int | None = None,
                  watch_path: str | None = None,
                  respect_robots: bool = False,
                  browser_pool: bool = False,
@@ -134,6 +135,8 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     (also ``JOBSCRAPER_BROWSER_POOL=1``) keeps one headless Chromium
     alive per worker thread for the whole run instead of launching a
     fresh browser per posting; requires the ``browser`` extra.
+    ``max_age`` (days) keeps only postings posted within the last N days;
+    postings with an unknown age are kept.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -177,7 +180,8 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     results = apply_filters(results, location_filter, keyword_filter,
                             exclude_companies, exclude_keywords,
                             seniority_filter=seniority,
-                            salary_min=salary_min, salary_max=salary_max)
+                            salary_min=salary_min, salary_max=salary_max,
+                            max_age=max_age)
     if min_score is not None:
         results = [p for p in results
                    if p.error or (p.match and p.match.total >= min_score)]
@@ -198,7 +202,8 @@ def apply_filters(posts: list[Posting],
                   exclude_keywords: str | None = None,
                   seniority_filter: str | None = None,
                   salary_min: str | None = None,
-                  salary_max: str | None = None) -> list[Posting]:
+                  salary_max: str | None = None,
+                  max_age: int | None = None) -> list[Posting]:
     """Keep/drop postings by location, title keywords and exclusions.
 
     ``keyword_filter`` keeps titles containing any comma-separated keyword;
@@ -209,8 +214,10 @@ def apply_filters(posts: list[Posting],
     ``salary_min``/``salary_max`` are threshold specs like ``"80K USD"`` or
     ``"25 LPA"``: postings whose salary range cannot reach the minimum (or
     whose range bottom exceeds the maximum) are dropped, while postings
-    with no parsed salary figures are always kept. Errored postings are
-    always kept so failures stay visible.
+    with no parsed salary figures are always kept. ``max_age`` keeps only
+    postings posted within the last N days (postings whose age cannot be
+    determined are always kept). Errored postings are always kept so
+    failures stay visible.
     """
     keywords = _split_csv(keyword_filter)
     loc_filter = (location_filter or "").lower()
@@ -219,6 +226,8 @@ def apply_filters(posts: list[Posting],
     seniority_levels = set(_split_csv(seniority_filter))
     min_threshold = parse_salary_threshold(salary_min) if salary_min else None
     max_threshold = parse_salary_threshold(salary_max) if salary_max else None
+    if max_age is not None and max_age < 0:
+        raise ValueError(f"max_age must be >= 0 (got {max_age})")
     unknown_levels = {lvl for lvl in seniority_levels
                       if lvl not in SENIORITY_LEVELS}
     if unknown_levels:
@@ -230,6 +239,9 @@ def apply_filters(posts: list[Posting],
         if post.error:
             return True
         if not meets_salary_threshold(post, min_threshold, max_threshold):
+            return False
+        if (max_age is not None and post.age_days is not None
+                and post.age_days > max_age):
             return False
         if seniority_levels and post.seniority not in seniority_levels:
             return False

@@ -26,6 +26,7 @@ Planned improvements, in rough priority order.
 
 ## Scoring
 - [x] Profile schema validation with helpful errors
+- [x] Posting freshness filter (`--max-age DAYS`, JobSpy `hours_old`-style, applied across all sources on parsed posting age; unknown ages kept as unknown)
 - [x] Configurable score weights
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [x] Structured seniority inference (`src/jobscraper/seniority.py`): explicit level ladder (intern/entry/mid/senior/staff/lead/manager/director/executive/unknown) with match evidence and confidence, from title markers, description signals, and required-experience bands; `--seniority` filter; level column in CSV/Excel/HTML exports

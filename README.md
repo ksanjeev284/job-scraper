@@ -109,6 +109,7 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--seniority LEVEL[,LEVEL]` | keep only postings at these seniority levels: `intern`, `entry`, `mid`, `senior`, `staff`, `lead`, `manager`, `director`, `executive`, `unknown` |
 | `--min-salary AMOUNT` | keep only postings whose salary range can reach AMOUNT (annual), e.g. `--min-salary "80K USD"` or `--min-salary "25 LPA"`; postings with no parsed salary are kept |
 | `--max-salary AMOUNT` | keep only postings whose salary range bottom is at or below AMOUNT (annual), e.g. `--max-salary "200K USD"`; postings with no parsed salary are kept |
+| `--max-age DAYS` | keep only postings posted within the last N days (freshness filter, JobSpy `hours_old`-style); postings with an unknown age are kept |
 | `--out PATH` | JSON output path |
 | `--md PATH` | Markdown report path |
 | `--csv PATH` | CSV export path |
@@ -137,6 +138,16 @@ range *top* reaches the amount; `--max-salary` keeps postings whose range
 *bottom* is at or below it. Postings with no parsed salary figures are
 always kept: a missing salary is reported as unknown, never treated as
 proof the pay is too low or too high.
+
+### Posting freshness filter
+
+`--max-age DAYS` keeps only postings posted within the last N days —
+JobSpy `hours_old`-style, but applied uniformly across every source
+(board APIs, LinkedIn, remote boards, `--discover` sweeps) on the
+`age_days` the scraper already derives from posting dates and relative
+labels ("3 days ago", "posted 2 weeks ago"). A posting whose age cannot
+be determined is always kept (reported as unknown), never silently
+dropped, and fetch failures stay visible regardless of the filter.
 
 ### Respecting robots.txt
 

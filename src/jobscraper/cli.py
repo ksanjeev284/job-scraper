@@ -130,6 +130,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "is at or below AMOUNT (annual), e.g. "
                              "--max-salary \"200K USD\"; postings without "
                              "a parsed salary are kept")
+    parser.add_argument("--max-age", type=int, default=None, metavar="DAYS",
+                        help="Keep only postings posted within the last "
+                             "DAYS days (JobSpy-style freshness filter); "
+                             "postings with an unknown age are kept")
     parser.add_argument("--watch", default=None, metavar="STATE.json",
                         help="Watch mode: flag postings never seen before; "
                              "seen postings persist in STATE.json")
@@ -317,6 +321,10 @@ def main(argv: list[str] | None = None) -> int:
         profile["locations"] = [loc.strip() for loc in
                                 args.locations.split(",") if loc.strip()]
 
+    if args.max_age is not None and args.max_age < 0:
+        print("error: --max-age must be >= 0", file=sys.stderr)
+        return 2
+
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     out = args.out or f"scrape-{stamp}.json"
     md = args.md or f"scrape-{stamp}.md"
@@ -335,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
         exclude_keywords=args.exclude_keywords,
         min_score=args.min_score, seniority=args.seniority,
         salary_min=args.min_salary, salary_max=args.max_salary,
+        max_age=args.max_age,
         watch_path=args.watch,
         respect_robots=args.respect_robots,
         browser_pool=args.browser_pool,
