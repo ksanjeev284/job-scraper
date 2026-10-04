@@ -31,6 +31,7 @@ from jobscraper.extract import (
     soup_text,
     split_sections,
 )
+from jobscraper.http import configure_robots, robots_from_env
 from jobscraper.models import Posting, Section
 from jobscraper.rendering import fetch_playwright, fetch_requests
 from jobscraper.scoring import posting_age_days, score_posting
@@ -94,15 +95,21 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  exclude_keywords: str | None = None,
                  min_score: int | None = None,
                  watch_path: str | None = None,
+                 respect_robots: bool = False,
                  progress_cb=None) -> tuple[list[Posting], int]:
     """Scrape every URL and return (postings, new_count, closed).
 
     ``progress_cb(done, total)`` is called as each URL finishes, so web
     UIs and CLIs can show progress. ``new_count`` is nonzero only in
     watch mode (postings never seen before); ``closed`` lists postings
-    seen before that disappeared this run.
+    seen before that disappeared this run. ``respect_robots`` turns on
+    the opt-in robots.txt check (also honored via the
+    ``JOBSCRAPER_RESPECT_ROBOTS`` env var); disallowed URLs end with an
+    explicit error on the posting, never a silent skip.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    configure_robots(respect_robots or robots_from_env())
 
     def work(url: str):
         try:

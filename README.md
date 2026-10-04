@@ -112,8 +112,25 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--workers N` | parallel fetch workers (default 4) |
 | `--no-cache` | ignore the local 24h page cache |
 | `--no-dedupe` | keep cross-board duplicates |
+| `--respect-robots` | honor robots.txt for every fetched URL (also via the `JOBSCRAPER_RESPECT_ROBOTS` env var) |
 | `--proxy URL` | proxy URL for all requests (repeatable; rotated round-robin) |
 | `--proxies-file PATH` | text file with one proxy URL per line (`#` comments allowed) |
+
+### Respecting robots.txt
+
+Off by default; opt in with `--respect-robots` (or set
+`JOBSCRAPER_RESPECT_ROBOTS=1`):
+
+```bash
+jobscraper --urls urls.txt --respect-robots
+```
+
+Each host's `robots.txt` is fetched once and cached for 24 hours. Any URL
+the host disallows raises an explicit error on the posting (recorded in
+`fetch_notes`, never silently skipped), so disallowed postings stay
+visible in the report with their reason. Hosts with no reachable
+robots.txt are treated as fully allowed, and a robots.txt fetch failure
+never blocks crawling.
 
 ### Proxy rotation
 
@@ -251,7 +268,7 @@ so a board API changing shape or an extraction regression shows up here first.
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the remaining planned work (non-English
-heading detection, headless-browser pool, `robots.txt` support).
+heading detection, headless-browser pool).
 
 ## License
 

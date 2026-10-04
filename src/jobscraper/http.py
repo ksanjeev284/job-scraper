@@ -11,6 +11,12 @@ round-robin per request. Proxies that fail :data:`PROXY_MAX_FAILURES` times
 in a row are parked for :data:`PROXY_PARK_SECONDS` seconds and re-enter the
 pool automatically afterwards; when every proxy is parked, requests go out
 directly rather than fail.
+
+Optional robots.txt honoring: :func:`configure_robots` turns on an
+opt-in check — :func:`http_get` then raises
+:class:`RobotsDisallowedError` for URLs a host's robots.txt disallows
+(robots files are cached per host for a day; a missing or unreachable
+robots.txt means "allowed").
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ import random
 import threading
 import time
 from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
 
 import requests
 
@@ -44,6 +51,120 @@ CACHE_TTL = 24 * 3600  # seconds
 #: after PROXY_PARK_SECONDS. Tunable module constants for power users.
 PROXY_MAX_FAILURES = 3
 PROXY_PARK_SECONDS = 300.0
+
+#: How long a fetched robots.txt stays in the per-host cache.
+ROBOTS_TTL = 24 * 3600
+
+
+class RobotsDisallowedError(Exception):
+    """Raised when the opt-in robots.txt check blocks a fetch.
+
+    Carries ``url`` and the host's robots.txt path for diagnostics.
+    """
+
+    def __init__(self, url: str):
+        host = urlparse(url).netloc
+        super().__init__(
+            f"{url} is disallowed by {host}/robots.txt "
+            "(re-run without --respect-robots to skip this check)")
+        self.url = url
+
+
+_robots_enabled = False
+_robots_cache: dict[str, tuple[RobotFileParser, float]] = {}
+_robots_lock = threading.Lock()
+
+
+def configure_robots(enabled: bool) -> None:
+    """Enable or disable honoring robots.txt for every fetch.
+
+    Off by default. When enabled, :func:`http_get` refuses URLs the
+    target host's robots.txt disallows (raising
+    :class:`RobotsDisallowedError`); hosts with no reachable robots.txt
+    are treated as fully allowed.
+    """
+    global _robots_enabled
+    with _robots_lock:
+        _robots_enabled = bool(enabled)
+
+
+def robots_enabled() -> bool:
+    """True when robots.txt is currently being honored."""
+    with _robots_lock:
+        return _robots_enabled
+
+
+def reset_robots() -> None:
+    """Disable robots.txt checks and drop the per-host robots cache."""
+    configure_robots(False)
+    with _robots_lock:
+        _robots_cache.clear()
+
+
+def robots_from_env(var: str = "JOBSCRAPER_RESPECT_ROBOTS") -> bool:
+    """True when the env var opts into robots.txt (1/true/yes/on)."""
+    return os.environ.get(var, "").strip().lower() in {
+        "1", "true", "yes", "on"}
+
+
+def _fetch_robots_text(scheme: str, host: str) -> str | None:
+    """Download a host's robots.txt; None when missing/unreachable.
+
+    A fetch failure never blocks crawling: it is treated as "no rules".
+    """
+    try:
+        resp = requests.get(f"{scheme}://{host}/robots.txt",
+                            headers={"User-Agent": UA_POOL[0]},
+                            timeout=15)
+    except Exception:
+        return None
+    if resp.status_code >= 400:
+        return None
+    return resp.text
+
+
+def _robots_parser(url: str) -> RobotFileParser | None:
+    """Per-host cached robots.txt parser (None only on internal error)."""
+    parsed = urlparse(url)
+    host = parsed.netloc
+    scheme = parsed.scheme or "https"
+    with _robots_lock:
+        cached = _robots_cache.get(host)
+        if cached and time.time() - cached[1] < ROBOTS_TTL:
+            return cached[0]
+    parser = RobotFileParser()
+    parser.set_url(f"{scheme}://{host}/robots.txt")
+    try:
+        text = _fetch_robots_text(scheme, host)
+        if text:
+            parser.parse(text.splitlines())
+        else:
+            # No reachable robots.txt: treat as fully allowed (and keep
+            # the cache entry so we do not refetch on every URL).
+            parser.allow_all = True
+    except Exception:
+        return None
+    with _robots_lock:
+        _robots_cache[host] = (parser, time.time())
+    return parser
+
+
+def robots_allowed(url: str, user_agent: str = "*") -> bool:
+    """True when the URL may be fetched under the host's robots.txt.
+
+    Returns True when the robots check is disabled, when the host has
+    no reachable robots.txt, or when the parser errors: a missing or
+    unreadable robots.txt is never grounds for blocking.
+    """
+    if not robots_enabled():
+        return True
+    parser = _robots_parser(url)
+    if parser is None:
+        return True
+    try:
+        return bool(parser.can_fetch(user_agent, url))
+    except Exception:
+        return True
 
 _PROXY_SCHEMES = {"http", "https", "socks4", "socks5", "socks4h", "socks5h"}
 
@@ -81,7 +202,12 @@ def http_get(url: str, timeout: int = 30,
     Retries 429/5xx and network errors; fails fast on 401/403/404.
     Each attempt uses the next proxy from the rotation pool (if any).
     Raises the last error when retries are exhausted.
+    Raises :class:`RobotsDisallowedError` immediately when the opt-in
+    robots.txt check is enabled and the URL is disallowed.
     """
+    ua = get_ua()
+    if robots_enabled() and not robots_allowed(url, ua):
+        raise RobotsDisallowedError(url)
     last_err: Exception | None = None
     for attempt in range(max_retries):
         polite_wait(url)
@@ -89,7 +215,7 @@ def http_get(url: str, timeout: int = 30,
         try:
             resp = requests.get(
                 url,
-                headers={"User-Agent": get_ua(),
+                headers={"User-Agent": ua,
                          "Accept-Language": "en-US,en;q=0.9"},
                 proxies={"http": proxy, "https": proxy} if proxy else None,
                 timeout=timeout,

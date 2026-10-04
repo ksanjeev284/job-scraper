@@ -30,8 +30,8 @@ Planned improvements, in rough priority order.
 
 ## Robustness
 - [x] Optional proxy rotation support (`--proxy`, `--proxies-file`, `JOBSCRAPER_PROXIES`; round-robin with failure parking)
+- [x] Respect `robots.txt` per host (opt-in: `--respect-robots` / `JOBSCRAPER_RESPECT_ROBOTS`; per-host 24h cache; disallowed URLs get an explicit error, never a silent skip; missing/unreachable robots.txt = allowed)
 - [ ] Headless-browser pool to reuse Chromium across postings
-- [ ] Respect `robots.txt` per host (opt-in flag)
 
 ## Reporting
 - [x] Web GUI service (FastAPI + browser UI, JSON/CSV export, Docker)

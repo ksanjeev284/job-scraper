@@ -128,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--webhook-top", type=int, default=25, metavar="N",
                         help="Max postings included in the webhook payload "
                              "(default 25)")
+    parser.add_argument("--respect-robots", action="store_true",
+                        help="Honor robots.txt for every fetched URL "
+                             "(hosts with no reachable robots.txt are "
+                             "treated as allowed; also honored via the "
+                             "JOBSCRAPER_RESPECT_ROBOTS env var)")
     return parser
 
 
@@ -279,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         exclude_companies=args.exclude_companies,
         exclude_keywords=args.exclude_keywords,
         min_score=args.min_score, watch_path=args.watch,
+        respect_robots=args.respect_robots,
         progress_cb=progress)
     after = sum(1 for p in results if not p.error)
     if before - after:

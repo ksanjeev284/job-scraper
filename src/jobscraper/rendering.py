@@ -12,7 +12,15 @@ import time
 from bs4 import BeautifulSoup
 
 from jobscraper.extract import looks_blocked
-from jobscraper.http import cache_get, cache_put, get_ua, http_get
+from jobscraper.http import (
+    RobotsDisallowedError,
+    cache_get,
+    cache_put,
+    get_ua,
+    http_get,
+    robots_allowed,
+    robots_enabled,
+)
 
 
 def fetch_playwright(url: str, use_cache: bool = True
@@ -20,8 +28,12 @@ def fetch_playwright(url: str, use_cache: bool = True
     """Render with headless Chromium; returns (title, html).
 
     Raises on failure so the caller can fall back to plain requests.
+    Raises :class:`RobotsDisallowedError` when the opt-in robots.txt
+    check is enabled and the host disallows the URL.
     """
     from playwright.sync_api import sync_playwright
+    if robots_enabled() and not robots_allowed(url, get_ua()):
+        raise RobotsDisallowedError(url)
     if use_cache:
         cached = cache_get(url)
         if cached is not None:

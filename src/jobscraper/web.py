@@ -66,6 +66,7 @@ class ScrapeRequest(BaseModel):
     exclude_keywords: str | None = None
     min_score: int | None = None
     workers: int = 4
+    respect_robots: bool = False
 
 
 def _resolve_urls(req: ScrapeRequest) -> list[str]:
@@ -130,6 +131,7 @@ def _run_job(job_id: str, urls: list[str], req: ScrapeRequest) -> None:
             exclude_companies=req.exclude_companies,
             exclude_keywords=req.exclude_keywords,
             min_score=req.min_score,
+            respect_robots=req.respect_robots,
             progress_cb=progress)
         payload = [p.to_dict() for p in results]
         with _JOBS_LOCK:
