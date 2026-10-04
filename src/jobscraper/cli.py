@@ -97,6 +97,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--proxies-file", default=None, metavar="PATH",
                         help="Text file with one proxy URL per line "
                              "(# comments allowed)")
+    parser.add_argument("--webhook-url", action="append", default=[],
+                        metavar="URL",
+                        help="POST the ranked results as JSON to this "
+                             "webhook URL (repeatable); see README for "
+                             "Slack/Discord/Google Sheets/Notion recipes")
+    parser.add_argument("--webhook-mode", default="plain",
+                        choices=["plain", "slack", "discord"],
+                        help="Webhook payload format (default plain; "
+                             "slack/discord send a chat notification)")
+    parser.add_argument("--webhook-only-new", action="store_true",
+                        help="With --watch, only notify about postings "
+                             "flagged new since the last run "
+                             "(skips silently when nothing is new)")
+    parser.add_argument("--webhook-top", type=int, default=25, metavar="N",
+                        help="Max postings included in the webhook payload "
+                             "(default 25)")
     return parser
 
 
@@ -225,6 +241,31 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Excel: {exc}", file=sys.stderr)
             return 1
         print(f"XLSX: {args.excel}")
+
+    from jobscraper.notify import deliver, webhook_urls_from_env
+    webhook_urls = list(args.webhook_url) + webhook_urls_from_env()
+    if webhook_urls:
+        seen, deduped = set(), []
+        for url in webhook_urls:
+            if url not in seen:
+                seen.add(url)
+                deduped.append(url)
+        results_ = deliver(results, deduped, mode=args.webhook_mode,
+                           only_new=args.webhook_only_new,
+                           top=args.webhook_top)
+        failed = 0
+        for host, ok, detail in results_:
+            if ok is None:
+                print(f"Webhook {host}: skipped ({detail})")
+            elif ok:
+                print(f"Webhook {detail}")
+            else:
+                print(f"Webhook FAILED: {detail}", file=sys.stderr)
+                failed += 1
+        if failed:
+            print("error: one or more webhooks failed",
+                  file=sys.stderr)
+            return 1
     ok = sum(1 for p in results if not p.error)
     print(f"\nDone: {ok}/{len(results)} scraped OK")
     print(f"JSON: {out}\nMD:   {md}")

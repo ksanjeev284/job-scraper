@@ -20,6 +20,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; skips URLs already marked applied in your tracker file
 - **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML and Excel outputs
 - **Excel export** — `--excel results.xlsx` writes the ranked spreadsheet: score-colored cells, frozen header with autofilter, clickable posting URLs, formula-injection neutralized (needs `pip install -e ".[excel]"`)
+- **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications (see below)
 
 ## Web GUI
 
@@ -131,6 +132,48 @@ by delivering the response.
 
 ## How it works
 
+### Webhook notifications and export hooks
+
+After the reports are written, the ranked results can be POSTed as JSON to
+one or more webhook URLs (repeatable `--webhook-url`, or comma-separated in
+the `JOBSCRAPER_WEBHOOK_URL` env var):
+
+```bash
+# Full JSON payload to a custom receiver (e.g. a Sheets/Notion bridge)
+jobscraper --urls urls.txt --webhook-url https://example.com/receive
+
+# Slack or Discord notification of the run's results
+jobscraper --urls urls.txt \
+  --webhook-url https://hooks.slack.com/services/T.../B.../secret \
+  --webhook-mode slack
+
+# Watch mode + notifications: only ping when new postings appear
+jobscraper --urls urls.txt --watch state.json --webhook-only-new \
+  --webhook-url https://discord.com/api/webhooks/123/secret \
+  --webhook-mode discord --webhook-top 10
+```
+
+- `--webhook-mode plain` (default) sends the full JSON payload:
+  `tool`, `generated_at`, `total`, `new`, and the ranked `postings`.
+- `--webhook-mode slack` sends a Block Kit message; `--webhook-mode discord`
+  sends an embed message (max 10 embeds; longer lists are truncated).
+- `--webhook-only-new` skips the POST entirely when watch mode finds nothing
+  new. `--webhook-top N` caps the postings included (default 25).
+- Webhook URLs carry secrets in their path: only the host is ever logged.
+  Delivery failures print an error and exit non-zero; they never take down
+  the scrape results already written.
+
+**Google Sheets:** create an Apps Script with a `doPost(e)` that parses
+`JSON.parse(e.postData.contents)` and appends one row per
+`payload.postings` entry to your sheet, deploy as a web app, and pass its
+URL to `--webhook-url`.
+
+**Notion:** point `--webhook-url` at a small bridge (a few-line server or
+serverless function) that reads `payload.postings` and creates pages in
+your Notion database via the Notion API (`/v1/pages`); the `plain` payload
+already carries title, company, location, score, URL, salary, and skill
+gaps per posting.
+
 ```
 URL
  ├─ board API fast path (Lever, Ashby, Greenhouse, SmartRecruiters,
@@ -177,7 +220,9 @@ pytest
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for planned board integrations (Breezy HR, BambooHR, Pinpoint, Rippling), full-board discovery from a company career page, and fixture-based regression tests.
+See [ROADMAP.md](ROADMAP.md) for the remaining planned work (fixture-based
+regression tests, non-English heading detection, headless-browser pool,
+`robots.txt` support).
 
 ## License
 
