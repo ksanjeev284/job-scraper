@@ -18,7 +18,8 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Structured extraction** — splits descriptions into headed sections, buckets them into requirements / responsibilities / nice-to-haves, and detects skills, experience years, salary figures, sponsorship mentions, language requirements and work mode
 - **0-100 match scoring** — against a candidate profile JSON: technical skills (35), experience (25), seniority (15), certifications (10), location (5), role relevance (5), compensation (5); includes skill gaps and a fit/watch summary
 - **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; skips URLs already marked applied in your tracker file
-- **Parallel** — multi-threaded fetching; JSON, ranked Markdown and CSV outputs
+- **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML and Excel outputs
+- **Excel export** — `--excel results.xlsx` writes the ranked spreadsheet: score-colored cells, frozen header with autofilter, clickable posting URLs, formula-injection neutralized (needs `pip install -e ".[excel]"`)
 
 ## Web GUI
 
@@ -43,6 +44,8 @@ pip install -e .
 # optional: headless browser fallback
 pip install -e ".[browser]"
 playwright install chromium
+# optional: Excel export
+pip install -e ".[excel]"
 ```
 
 ## Usage

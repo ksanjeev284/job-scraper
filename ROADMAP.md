@@ -33,4 +33,5 @@ Planned improvements, in rough priority order.
 ## Reporting
 - [x] Web GUI service (FastAPI + browser UI, JSON/CSV export, Docker)
 - [x] HTML report option (self-contained, XSS-safe)
+- [x] Excel (.xlsx) export — ranked sheet, score bands, autofilter, clickable URLs, formula-injection neutralization (optional openpyxl extra)
 - [ ] Notion / Google Sheets export hooks

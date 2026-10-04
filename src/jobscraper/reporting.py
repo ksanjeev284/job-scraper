@@ -1,4 +1,4 @@
-"""Report writers: ranked Markdown, CSV, and HTML exports."""
+"""Report writers: ranked Markdown, CSV, HTML, and Excel exports."""
 
 from __future__ import annotations
 
@@ -123,43 +123,134 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
         fh.write("\n".join(lines))
 
 
+def _spreadsheet_headers() -> list[str]:
+    """Column headers shared by the CSV and Excel exports."""
+    return ["score", "live", "age_days", "title", "company", "location",
+            "type", "exp_years", "salary", "matched_skills", "skill_gaps",
+            "fit_summary", "benefits", "sponsorship", "german_required",
+            "work_mode", "tracker", "url"]
+
+
+def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
+    """One export row for a posting; empty strings mark unknown states."""
+    match = post.match
+    live = ("yes" if post.is_live
+            else "no" if post.is_live is False else "unknown")
+    return [
+        match.total if match else "",
+        live,
+        post.age_days if post.age_days is not None else "",
+        post.title or "",
+        post.company or "",
+        post.location or "",
+        post.employment_type or "",
+        ",".join(map(str, post.experience_years_mentioned)),
+        "; ".join(post.salary_hits),
+        "; ".join(match.matched_skills) if match else "",
+        "; ".join(match.skill_gaps) if match else "",
+        "; ".join(fit_summary(post, profile)),
+        "; ".join(s.heading for s in post.benefits),
+        "yes" if post.signals.get("sponsorship_mentioned") else "",
+        "yes" if post.signals.get("german_required") else "",
+        ",".join(post.signals.get("work_mode") or []),
+        post.tracker_status or "",
+        post.url,
+    ]
+
+
+def _export_order(posts: list[Posting]) -> list[Posting]:
+    return sorted(posts,
+                  key=lambda p: p.match.total if p.match else -1,
+                  reverse=True)
+
+
 def write_csv(posts: list[Posting], path: str, profile: dict) -> None:
     """Write the spreadsheet-friendly CSV, best score first."""
-    ordered = sorted(posts,
-                     key=lambda p: p.match.total if p.match else -1,
-                     reverse=True)
     with open(path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["score", "live", "age_days", "title", "company",
-                         "location", "type", "exp_years", "salary",
-                         "matched_skills", "skill_gaps", "fit_summary",
-                         "benefits",
-                         "sponsorship", "german_required", "work_mode",
-                         "tracker", "url"])
-        for post in ordered:
-            match = post.match
-            live = "yes" if post.is_live else (
-                "no" if post.is_live is False else "unknown")
-            writer.writerow([
-                match.total if match else "",
-                live,
-                post.age_days if post.age_days is not None else "",
-                post.title or "",
-                post.company or "",
-                post.location or "",
-                post.employment_type or "",
-                ",".join(map(str, post.experience_years_mentioned)),
-                "; ".join(post.salary_hits),
-                "; ".join(match.matched_skills) if match else "",
-                "; ".join(match.skill_gaps) if match else "",
-                "; ".join(fit_summary(post, profile)),
-                "; ".join(s.heading for s in post.benefits),
-                "yes" if post.signals.get("sponsorship_mentioned") else "",
-                "yes" if post.signals.get("german_required") else "",
-                ",".join(post.signals.get("work_mode") or []),
-                post.tracker_status or "",
-                post.url,
-            ])
+        writer.writerow(_spreadsheet_headers())
+        for post in _export_order(posts):
+            writer.writerow(_spreadsheet_row(post, profile))
+
+
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralize_formulas(ws) -> None:
+    """Mark formula-looking text cells as plain strings.
+
+    Spreadsheet apps auto-evaluate cells starting with =, +, -, @, so
+    force openpyxl's ``s`` (string) type to keep untrusted posting text
+    inert when the workbook is opened.
+    """
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            if (cell.data_type == "f" and isinstance(cell.value, str)
+                    and cell.value[:1] in _FORMULA_PREFIXES):
+                cell.data_type = "s"
+
+
+def write_xlsx(posts: list[Posting], path: str, profile: dict) -> None:
+    """Write the ranked spreadsheet as .xlsx, best score first.
+
+    One sheet, styled header, frozen header row, autofilter, clickable
+    posting URLs, and score cells colored green/amber/red by band.
+    Needs the optional ``excel`` extra (openpyxl); raises RuntimeError
+    with the install hint when it is missing.
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:
+        raise RuntimeError(
+            "Excel export needs the optional 'excel' extra: "
+            "pip install jobscraper[excel]"
+        ) from exc
+
+    headers = _spreadsheet_headers()
+    rows = [_spreadsheet_row(p, profile) for p in _export_order(posts)]
+    url_col = headers.index("url") + 1
+    score_col = headers.index("score") + 1
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ranked"
+
+    head_fill = PatternFill("solid", fgColor="1F2937")
+    head_font = Font(bold=True, color="FFFFFF")
+    fills = {
+        "hi": PatternFill("solid", fgColor="D1E7DD"),
+        "mid": PatternFill("solid", fgColor="FFF3CD"),
+        "lo": PatternFill("solid", fgColor="F8D7DA"),
+    }
+
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.fill = head_fill
+        cell.font = head_font
+        cell.alignment = Alignment(vertical="top", wrap_text=False)
+    for row in rows:
+        ws.append(row)
+    for data_row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+        score = data_row[score_col - 1].value
+        if isinstance(score, (int, float)):
+            band = "hi" if score >= 75 else "mid" if score >= 50 else "lo"
+            data_row[score_col - 1].fill = fills[band]
+        url_cell = data_row[url_col - 1]
+        if url_cell.value:
+            url_cell.hyperlink = url_cell.value
+            url_cell.font = Font(color="0969DA", underline="single")
+            url_cell.alignment = Alignment(vertical="top")
+    widths = [8, 10, 9, 42, 28, 28, 18, 12, 24, 28, 28, 30, 30, 12, 15, 14,
+              12, 60]
+    for idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    _neutralize_formulas(ws)
+    wb.save(path)
 
 
 _HTML_CSS = """

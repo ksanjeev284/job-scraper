@@ -8,7 +8,7 @@ import sys
 from datetime import datetime, timezone
 
 from jobscraper.pipeline import run_pipeline
-from jobscraper.reporting import write_csv, write_html, write_markdown
+from jobscraper.reporting import write_csv, write_html, write_markdown, write_xlsx
 from jobscraper.scoring import load_profile, validate_profile
 
 
@@ -31,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Path to a tracker file for applied-dedupe")
     parser.add_argument("--csv", default=None, help="CSV export path")
     parser.add_argument("--html", default=None, help="HTML report path")
+    parser.add_argument("--excel", default=None,
+                        help="Excel (.xlsx) export path "
+                             "(needs the 'excel' extra)")
     parser.add_argument("--no-cache", action="store_true",
                         help="Ignore the local page cache and refetch")
     parser.add_argument("--workers", type=int, default=4,
@@ -215,6 +218,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.html:
         write_html(results, args.html, profile)
         print(f"HTML: {args.html}")
+    if args.excel:
+        try:
+            write_xlsx(results, args.excel, profile)
+        except RuntimeError as exc:
+            print(f"Excel: {exc}", file=sys.stderr)
+            return 1
+        print(f"XLSX: {args.excel}")
     ok = sum(1 for p in results if not p.error)
     print(f"\nDone: {ok}/{len(results)} scraped OK")
     print(f"JSON: {out}\nMD:   {md}")
