@@ -11,6 +11,8 @@ Planned improvements, in rough priority order.
 - [x] LinkedIn guest job-search API (no login)
 
 ## Extraction
+- [x] Posting-age parsing for relative dates ("2 days ago", "3 weeks ago")
+- [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [ ] Fixture-based regression tests (live posting, closed ATS API posting, SPA shell with embedded JSON, block page, duplicates, malformed responses)
 - [ ] Better heading detection for non-English postings
 - [ ] Structured benefits extraction (bonus, equity, visa sponsorship terms)

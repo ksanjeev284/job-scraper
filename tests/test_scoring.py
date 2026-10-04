@@ -74,6 +74,33 @@ def test_posting_age_days_formats():
     assert posting_age_days(None) is None
 
 
+def test_posting_age_days_relative():
+    assert posting_age_days("3 days ago") == 3
+    assert posting_age_days("2 weeks ago") == 14
+    assert posting_age_days("1 month ago") == 30
+    assert posting_age_days("5 hours ago") == 0
+    assert posting_age_days("today") == 0
+    assert posting_age_days("yesterday") == 1
+
+
+def test_skill_aliases_count_as_matched(tmp_path):
+    data = {
+        "skills": ["SIEM"],
+        "years_total": 4,
+        "locations": [],
+        "skill_aliases": {"SIEM": ["Splunk ES", "QRadar"]},
+    }
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(data))
+    profile = load_profile(str(path))
+    post = _posting(title="Splunk ES Engineer")
+    post.skills_found = ["Splunk ES"]
+    post.location = ""
+    match = score_posting(post, profile)
+    assert "splunk es" in match.matched_skills
+    assert "splunk es" not in match.skill_gaps
+
+
 def test_role_tiers_from_profile(tmp_path):
     data = {
         "skills": ["Python"],

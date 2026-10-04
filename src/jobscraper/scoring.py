@@ -64,11 +64,30 @@ def load_profile(path: str | None) -> dict:
         return json.load(fh)
 
 
+RELATIVE_DATE_RE = re.compile(
+    r"(\d+)\s*(minute|hour|day|week|month|year)s?\s+ago", re.I)
+
+
 def posting_age_days(posted: str | None) -> int | None:
-    """Parse a posted-date string into days-old; None if unparseable."""
+    """Parse a posted-date string into days-old; None if unparseable.
+
+    Handles ISO dates, common absolute formats, and relative labels like
+    "3 days ago" / "2 weeks ago" (as LinkedIn's guest API returns).
+    """
     if not posted:
         return None
     text = str(posted).strip()
+    lowered = text.lower()
+    if lowered in ("today", "just now", "just posted"):
+        return 0
+    if lowered == "yesterday":
+        return 1
+    rel = RELATIVE_DATE_RE.search(lowered)
+    if rel:
+        n, unit = int(rel.group(1)), rel.group(2).lower()
+        mult = {"minute": 0, "hour": 0, "day": 1, "week": 7,
+                "month": 30, "year": 365}[unit]
+        return n * mult
     text2 = re.sub(r"(\.\d+)?(Z)$", r"\1+0000", text)
     fmts = ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z",
             "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%Y/%m/%d",
@@ -101,7 +120,16 @@ def score_posting(post: Posting, profile: dict) -> MatchResult:
 
     profile_skills = {s.lower() for s in profile.get("skills", [])}
     posting_skills = {s.lower() for s in post.skills_found}
-    matched = sorted(s for s in posting_skills if s in profile_skills)
+    # skill_aliases: {"SIEM": ["Splunk ES", "QRadar"]} lets a posting that
+    # names a specific tool count toward the broader profile skill
+    aliases: dict[str, set[str]] = {}
+    for canonical, variants in (profile.get("skill_aliases") or {}).items():
+        aliases[canonical.lower()] = {v.lower() for v in variants}
+    matched = sorted(
+        s for s in posting_skills
+        if s in profile_skills
+        or any(s in aliases.get(p, set()) for p in profile_skills)
+    )
     gaps = sorted(posting_skills - set(matched) - profile_skills)
     profile_certs = {c.lower() for c in profile.get("certs", [])}
     pref_locs = [loc.lower() for loc in profile.get("locations", [])]

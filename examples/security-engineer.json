@@ -5,6 +5,7 @@
     "Splunk Enterprise Certified Admin"
   ],
   "current_ctc_lpa": 12.0,
+  "custom_skills": [],
   "locations": [
     "Hyderabad",
     "Bengaluru",
@@ -16,6 +17,50 @@
     "Remote"
   ],
   "name": "Example Candidate",
+  "role_tiers": {
+    "tier1": [
+      "siem",
+      "splunk",
+      "detection engineer",
+      "security engineer",
+      "detection & response",
+      "threat detection"
+    ],
+    "tier2": [
+      "soc",
+      "incident response",
+      "threat hunt",
+      "blue team",
+      "vulnerability management",
+      "security operation",
+      "threat intel",
+      "cloud security"
+    ],
+    "tier3": [
+      "appsec",
+      "application security",
+      "product security",
+      "devsecops",
+      "api security"
+    ]
+  },
+  "skill_aliases": {
+    "EDR": [
+      "CrowdStrike",
+      "SentinelOne",
+      "Cortex XDR"
+    ],
+    "SIEM": [
+      "Splunk ES",
+      "QRadar",
+      "Microsoft Sentinel",
+      "LogRhythm"
+    ],
+    "SOAR": [
+      "Splunk SOAR",
+      "Cortex XSOAR"
+    ]
+  },
   "skills": [
     "Splunk",
     "Splunk ES",

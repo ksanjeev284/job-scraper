@@ -61,7 +61,7 @@ Outputs: `results.json` (full structured data), `report.md` (ranked summary + pe
 
 ### Candidate profile
 
-Pick the closest starting point in `examples/` (`security-engineer.json`, `software-engineer.json`, `data-analyst.json`) or start blank from `template.json`, copy it to `my-profile.json`, and fill in your skills, years of experience, certs, preferred locations, current CTC, role tiers (`tier1`/`tier2`/`tier3` keyword lists that define what counts as a strong role match for *your* field), and `custom_skills` (extra skill keywords the built-in vocabulary doesn't cover). Scoring runs against this profile; nothing personal ships with the repo. With no `--profile`, a neutral template is used.
+Pick the closest starting point in `examples/` (`security-engineer.json`, `software-engineer.json`, `data-analyst.json`) or start blank from `template.json`, copy it to `my-profile.json`, and fill in your skills, years of experience, certs, preferred locations, current CTC, role tiers (`tier1`/`tier2`/`tier3` keyword lists that define what counts as a strong role match for *your* field), and `custom_skills` (extra skill keywords the built-in vocabulary doesn't cover), and `skill_aliases` (e.g. `"SIEM": ["Splunk ES", "QRadar"]` so a posting naming a specific tool counts toward the broader skill). Scoring runs against this profile; nothing personal ships with the repo. With no `--profile`, a neutral template is used.
 
 ### Options
 
@@ -78,6 +78,7 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--locations "A,B"` | preferred locations for this run (overrides profile) |
 | `--location-filter TEXT` | keep only postings whose location contains TEXT |
 | `--keyword-filter "A,B"` | keep only postings whose title contains a keyword |
+| `--min-score N` | keep only postings scoring N or higher (0-100) |
 | `--out PATH` | JSON output path |
 | `--md PATH` | Markdown report path |
 | `--csv PATH` | CSV export path |

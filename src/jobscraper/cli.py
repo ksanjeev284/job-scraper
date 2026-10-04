@@ -72,6 +72,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Keep only postings whose title contains one of "
                              "these comma-separated keywords, e.g. "
                              "--keyword-filter \"analyst,engineer\"")
+    parser.add_argument("--min-score", type=int, default=None, metavar="N",
+                        help="Keep only postings scoring N or higher "
+                             "(0-100), e.g. --min-score 65")
     return parser
 
 
@@ -170,6 +173,13 @@ def main(argv: list[str] | None = None) -> int:
                                 args.keyword_filter)
         print(f"Filtered {before - len(results)} posting(s) "
               f"out by location/keyword filters")
+
+    if args.min_score is not None:
+        before = len(results)
+        results = [p for p in results
+                   if p.error or (p.match and p.match.total >= args.min_score)]
+        print(f"Filtered {before - len(results)} posting(s) "
+              f"below score {args.min_score}")
 
     with open(out, "w", encoding="utf-8") as fh:
         json.dump([p.to_dict() for p in results], fh, indent=2,
