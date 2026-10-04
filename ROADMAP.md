@@ -9,7 +9,7 @@ Planned improvements, in rough priority order.
 - [x] Rippling (`api.rippling.com/.../board/{slug}/jobs`)
 - [x] Full-board discovery: enumerate all open postings from a company career page (`--discover`)
 - [x] LinkedIn guest job-search API (no login)
-- [ ] Remote-only boards (RemoteOK, Remotive, WeWorkRemotely, Working Nomads — JobSpy-style remote presets)
+- [x] Remote-only boards (RemoteOK, Remotive, WeWorkRemotely, Working Nomads — JobSpy-style remote presets; `--remote-boards KEYWORDS`, client-side keyword filtering, cross-board de-dupe)
 - [ ] Curated seed registry of verified company boards for `--discover` sweeps
 
 ## Extraction

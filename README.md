@@ -11,6 +11,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 ## Features
 
 - **LinkedIn as a source** — public guest job-search API (no login): `jobscraper --linkedin "soc analyst" --location "Hyderabad, India" --days 30`
+- **Remote-only boards** — RemoteOK, Remotive, We Work Remotely and Working Nomads (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover greenhouse:acme`
 - **13 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling — public APIs/feeds, no login
 - **Anti-block fallbacks** — stealth headless Chromium (Playwright) after plain HTTP fails, with bot-challenge detection, per-domain rate limiting, user-agent rotation, retries with backoff, and a 24h page cache
@@ -87,6 +88,7 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 |---|---|
 | `--urls FILE` | file with one URL per line |
 | `--linkedin KEYWORDS` | search LinkedIn and scrape results |
+| `--remote-boards KEYWORDS` | search remote-only boards (RemoteOK, Remotive, We Work Remotely, Working Nomads) and scrape results |
 | `--location TEXT` | location filter for `--linkedin` |
 | `--geo-id ID` | LinkedIn geoId for `--linkedin` (more reliable than text) |
 | `--limit N` | max LinkedIn results (default 25) |
@@ -210,7 +212,7 @@ Discovery (`--discover BOARD:ID`) enumerates a whole career portal first:
 | `pinpoint` | slug | `pinpoint:acme` |
 | `rippling` | board slug | `rippling:acme` |
 
-Layout: `src/jobscraper/` — `boards.py` (ATS APIs + discovery), `sources/linkedin.py` (LinkedIn guest API), `extract.py` (parsing), `scoring.py` (match scores), `rendering.py` (browser/HTTP fetch), `pipeline.py` (orchestration), `reporting.py` (outputs), `cli.py`, `models.py`, `http.py` (network plumbing).
+Layout: `src/jobscraper/` — `boards.py` (ATS APIs + discovery), `sources/linkedin.py` (LinkedIn guest API), `sources/remote_boards.py` (RemoteOK/Remotive/WWR/Working Nomads remote boards), `extract.py` (parsing), `scoring.py` (match scores), `rendering.py` (browser/HTTP fetch), `pipeline.py` (orchestration), `reporting.py` (outputs), `cli.py`, `models.py`, `http.py` (network plumbing).
 
 ## What it doesn't cover
 

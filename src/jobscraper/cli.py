@@ -44,6 +44,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--linkedin", default=None, metavar="KEYWORDS",
                         help="Search LinkedIn jobs for KEYWORDS and scrape "
                              "the results")
+    parser.add_argument("--remote-boards", default=None, metavar="KEYWORDS",
+                        help="Search remote-only job boards (RemoteOK, "
+                             "Remotive, We Work Remotely, Working Nomads) "
+                             "for KEYWORDS and scrape the results")
     parser.add_argument("--location", default=None,
                         help="Location filter for --linkedin "
                              "(e.g. \"Hyderabad, India\")")
@@ -51,7 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="LinkedIn geoId for --linkedin (more reliable "
                              "than --location)")
     parser.add_argument("--limit", type=int, default=25,
-                        help="Max LinkedIn results to scrape (default 25)")
+                        help="Max --linkedin/--remote-boards results to "
+                             "scrape (default 25)")
     parser.add_argument("--days", type=int, default=None,
                         help="Only LinkedIn postings from the last N days")
     parser.add_argument("--remote", default=None,
@@ -183,6 +188,19 @@ def main(argv: list[str] | None = None) -> int:
             if len(cards) < 10:
                 break
         print(f"linkedin: {added} postings for '{args.linkedin}'")
+
+    if args.remote_boards:
+        from jobscraper.sources.remote_boards import search_remote_boards
+        cards = search_remote_boards(args.remote_boards, limit=args.limit)
+        added = 0
+        for card in cards:
+            if card.get("url") and card["url"] not in urls:
+                urls.append(card["url"])
+                added += 1
+                if added >= args.limit:
+                    break
+        print(f"remote-boards: {added} postings for "
+              f"'{args.remote_boards}'")
 
     if not urls:
         print("error: give URLs or --urls file", file=sys.stderr)
