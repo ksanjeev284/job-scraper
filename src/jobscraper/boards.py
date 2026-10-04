@@ -8,6 +8,7 @@ for that board. All endpoints are public and need no authentication.
 
 from __future__ import annotations
 
+import html
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
@@ -344,6 +345,96 @@ def fetch_breezy(url: str) -> dict | None:
     return None
 
 
+def _join_markdown_inline(text: str) -> str:
+    """Render inline markdown (bold/italic/links) as safe HTML."""
+    out = html.escape(text)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+    out = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", out)
+    out = re.sub(r"\[(.+?)\]\((https?://[^)\s]+)\)",
+                 r'<a href="\2">\1</a>', out)
+    return out
+
+
+def _join_markdown_to_html(text: str) -> str:
+    """Convert join.com's lightweight markdown description to safe HTML.
+
+    Handles ``##`` headings, ``* `` bullet lists, paragraphs and inline
+    bold/italic/links. Everything else is HTML-escaped paragraph text.
+    """
+    out: list[str] = []
+    in_list = False
+
+    def close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("### "):
+            close_list()
+            out.append(f"<h4>{_join_markdown_inline(stripped[4:])}</h4>")
+        elif stripped.startswith("## "):
+            close_list()
+            out.append(f"<h3>{_join_markdown_inline(stripped[3:])}</h3>")
+        elif stripped.startswith("* "):
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{_join_markdown_inline(stripped[2:])}</li>")
+        elif not stripped:
+            close_list()
+        else:
+            close_list()
+            out.append(f"<p>{_join_markdown_inline(stripped)}</p>")
+    close_list()
+    return "\n".join(out)
+
+
+def _join_location(data: dict) -> str | None:
+    """Build a ``City, Country`` location from a join.com job payload."""
+    city = (data.get("city") or {}).get("cityName")
+    country = (data.get("country") or {}).get("name")
+    workplace = (data.get("workplaceType") or "").upper()
+    if workplace == "REMOTE":
+        return f"Remote, {country}" if country else "Remote"
+    loc = ", ".join(x for x in (city, country) if x)
+    if workplace == "HYBRID" and loc:
+        loc += " (Hybrid)"
+    # The detail endpoint omits city/country; fall back to the company's
+    # free-text address ("Street, City, Country").
+    return loc or data.get("companyLocation") or None
+
+
+def fetch_join(url: str) -> dict | None:
+    """join.com public API (EU-focused ATS, no auth).
+
+    Matches https://join.com/companies/<slug>/<id>-<title-slug>.
+    Archived postings 404 the API, which the pipeline treats as closed.
+    """
+    match = re.search(r"join\.com/(?:companies/[\w-]+/)?(\d+-[\w-]+)",
+                      url)
+    if not match:
+        return None
+    data = http_get(f"https://join.com/api/public/jobs/{match.group(1)}",
+                    max_retries=2).json()
+    if not isinstance(data, dict):
+        return None
+    company = data.get("company") or {}
+    return {
+        "title": data.get("title"),
+        "company": company.get("name"),
+        "location": _join_location(data),
+        "employment_type": (data.get("employmentType") or {}).get("name"),
+        "department": (data.get("category") or {}).get("name"),
+        "description_html": _join_markdown_to_html(
+            data.get("description") or ""),
+        "posted": data.get("createdAt"),
+        "source": "join-api",
+    }
+
+
 def fetch_eightfold(url: str) -> dict | None:
     """Eightfold AI: ``{tenant}.eightfold.ai`` career boards.
 
@@ -528,6 +619,45 @@ def discover_rippling(slug: str) -> list[str]:
             for j in jobs if j.get("id")]
 
 
+def discover_join(slug: str) -> list[str]:
+    """spec: join.com company slug (join.com/companies/<slug>).
+
+    Two-step flow: the numeric company id is scraped from the company
+    page, then the public paginated jobs API (pageSize 4/5 only) is
+    walked to ``pagination.pageCount``. Canonical posting URLs are
+    https://join.com/companies/<slug>/<id>-<title-slug>.
+    """
+    page = http_get(f"https://join.com/companies/{slug}",
+                    max_retries=2).text
+    match = re.search(r'"company":\{"id":(\d+)', page)
+    if not match:
+        return []
+    company_id = match.group(1)
+    urls: list[str] = []
+    seen: set[str] = set()
+    page_num = 1
+    while True:
+        polite_wait("https://join.com/api/public/companies/" + company_id,
+                    base=0.5)
+        data = http_get(
+            f"https://join.com/api/public/companies/{company_id}/jobs"
+            f"?page={page_num}&pageSize=5",
+            max_retries=2).json()
+        if not isinstance(data, dict):
+            break
+        for item in data.get("items", []):
+            param = item.get("idParam")
+            if param and param not in seen:
+                seen.add(param)
+                urls.append(f"https://join.com/companies/{slug}/{param}")
+        page_count = (data.get("pagination") or {}).get("pageCount",
+                                                         page_num)
+        if page_num >= page_count:
+            break
+        page_num += 1
+    return urls
+
+
 DISCOVERERS: dict[str, object] = {
     "lever": discover_lever,
     "ashby": discover_ashby,
@@ -542,6 +672,7 @@ DISCOVERERS: dict[str, object] = {
     "pinpoint": discover_pinpoint,
     "rippling": discover_rippling,
     "eightfold": discover_eightfold,
+    "join": discover_join,
 }
 
 
@@ -558,6 +689,7 @@ BOARD_FETCHERS: list[Fetcher] = [
     fetch_workable_view,
     fetch_breezy,
     fetch_eightfold,
+    fetch_join,
     fetch_linkedin,
 ]
 
@@ -579,6 +711,7 @@ BOARD_HOSTS: tuple[tuple[str, str], ...] = (
     ("pinpointhq.com", "pinpoint"),
     ("rippling.com", "rippling"),
     ("eightfold.ai", "eightfold"),
+    ("join.com", "join"),
     ("themuse.com", "themuse"),
     ("news.ycombinator.com", "hn_whoishiring"),
     ("linkedin.com", "linkedin"),
