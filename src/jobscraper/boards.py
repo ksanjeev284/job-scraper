@@ -345,6 +345,101 @@ def fetch_breezy(url: str) -> dict | None:
     return None
 
 
+def _pinpoint_matches(item: dict, url: str) -> bool:
+    """True if a ``postings.json`` item is the posting at ``url``."""
+    item_url = (item.get("url") or "").rstrip("/")
+    if item_url and item_url.lower() == url.rstrip("/").lower():
+        return True
+    item_id = str(item.get("id") or "")
+    if item_id:
+        # /en/jobs/399793/hiring-process style numeric URLs
+        if re.search(rf"/jobs/{re.escape(item_id)}(?:[/?#]|$)", url):
+            return True
+        # the feed's /en/postings/<uuid> path
+        if re.search(rf"/postings/{re.escape(item_id)}(?:[/?#]|$)",
+                     item_url, re.IGNORECASE):
+            return True
+    return False
+
+
+def _pinpoint_location(item: dict) -> str | None:
+    """Build a location string from a Pinpoint payload."""
+    loc = item.get("location") or {}
+    city = (loc.get("city") or "").strip()
+    name = (loc.get("name") or "").strip()
+    workplace = (item.get("workplace_type") or "").lower()
+    if workplace == "remote":
+        return "Remote"
+    bits = [b for b in (name, city) if b]
+    return ", ".join(dict.fromkeys(bits)) or None
+
+
+def _pinpoint_salary_hint(item: dict) -> str | None:
+    """Format visible Pinpoint compensation as extractable salary text."""
+    if not item.get("compensation_visible"):
+        return None
+    lo, hi = item.get("compensation_minimum"), item.get("compensation_maximum")
+    if not lo and not hi:
+        return None
+    cur = (item.get("compensation_currency") or "").strip()
+    freq = (item.get("compensation_frequency") or "").strip()
+    band = "-".join(str(v) for v in (lo, hi) if v)
+    return " ".join(x for x in (cur, band, freq) if x) or None
+
+
+def fetch_pinpoint(url: str) -> dict | None:
+    """Pinpoint public feed: {slug}.pinpointhq.com/postings.json.
+
+    The same no-auth feed powers whole-board discovery
+    (``discover_pinpoint``) and carries the full posting payload:
+    description HTML, benefits, workplace and employment type, location
+    and compensation. Matches both the ``/jobs/<id>/`` posting URLs and
+    the ``/postings/<uuid>`` URLs the feed emits.
+    """
+    match = re.search(r"https://([\w-]+)\.pinpointhq\.com/"
+                      r"(?:[\w-]+/)?(?:jobs|postings)/[\w-]+", url)
+    if not match:
+        return None
+    slug = match.group(1)
+    feed = http_get(f"https://{slug}.pinpointhq.com/postings.json",
+                    max_retries=2).json()
+    if isinstance(feed, dict):
+        items = feed.get("data") or feed.get("postings") or []
+    elif isinstance(feed, list):
+        items = feed
+    else:
+        items = []
+    for item in items:
+        if not isinstance(item, dict) or not _pinpoint_matches(item, url):
+            continue
+        desc_html = item.get("description") or ""
+        for body_key, head_key, fallback in (
+                ("key_responsibilities", "key_responsibilities_header",
+                 "Responsibilities"),
+                ("skills_knowledge_expertise",
+                 "skills_knowledge_expertise_header",
+                 "Skills & expertise"),
+                ("benefits", "benefits_header", "Benefits")):
+            body = (item.get(body_key) or "").strip()
+            if body:
+                head = (item.get(head_key) or fallback).strip()
+                desc_html += f"\n<h2>{html.escape(head)}</h2>\n{body}"
+        pay = _pinpoint_salary_hint(item)
+        return {
+            "title": item.get("title"),
+            "company": slug,
+            "location": _pinpoint_location(item),
+            "employment_type": item.get("employment_type_text"),
+            "department": None,
+            "description_html": desc_html,
+            "posted": None,
+            "salary_hits_extra": [pay] if pay else [],
+            "position_url": item.get("url") or url,
+            "source": "pinpoint-feed",
+        }
+    return None
+
+
 def _join_markdown_inline(text: str) -> str:
     """Render inline markdown (bold/italic/links) as safe HTML."""
     out = html.escape(text)
@@ -606,7 +701,10 @@ def discover_breezy(tenant: str) -> list[str]:
 def discover_pinpoint(slug: str) -> list[str]:
     data = http_get(f"https://{slug}.pinpointhq.com/postings.json",
                     max_retries=2).json()
-    items = data if isinstance(data, list) else data.get("postings", [])
+    if isinstance(data, list):
+        items = data
+    else:
+        items = data.get("postings", []) or data.get("data", [])
     return [i.get("url") or i.get("absolute_url") for i in items
             if i.get("url") or i.get("absolute_url")]
 
@@ -688,6 +786,7 @@ BOARD_FETCHERS: list[Fetcher] = [
     fetch_workable,
     fetch_workable_view,
     fetch_breezy,
+    fetch_pinpoint,
     fetch_eightfold,
     fetch_join,
     fetch_linkedin,

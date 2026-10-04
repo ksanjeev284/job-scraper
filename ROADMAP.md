@@ -7,6 +7,7 @@ Planned improvements, in rough priority order.
 - [x] BambooHR (career pages via generic scrape path)
 - [x] Pinpoint (`{slug}.pinpointhq.com/postings.json`)
 - [x] Rippling (`api.rippling.com/.../board/{slug}/jobs`)
+- [x] Pinpoint single-posting fetch (2026-10-04): `fetch_pinpoint` resolves both `/jobs/<id>/` and `/postings/<uuid>` Pinpoint URLs to full structured postings straight from the no-auth `postings.json` feed (title, description HTML, benefits/responsibilities/skills sections, workplace and employment type, location, visible compensation as `salary_hits_extra`) so discovered Pinpoint boards no longer fall back to the generic scraper; also fixed `discover_pinpoint` to read the feed's `"data"` key
 - [x] Full-board discovery: enumerate all open postings from a company career page (`--discover`)
 - [x] LinkedIn guest job-search API (no login)
 - [x] Remote-only boards (RemoteOK, Remotive, WeWorkRemotely, Working Nomads — JobSpy-style remote presets; `--remote-boards KEYWORDS`, client-side keyword filtering, cross-board de-dupe)
