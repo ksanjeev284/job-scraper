@@ -3,11 +3,12 @@
 Planned improvements, in rough priority order.
 
 ## Board coverage
-- [ ] Breezy HR (`breezy.hr` candidate API)
-- [ ] BambooHR (`*.bamboohr.com` public JSON)
-- [ ] Pinpoint (`*.pinpointhq.com` API)
-- [ ] Rippling ATS
-- [ ] Full-board discovery: given a company career page, enumerate all open postings via that board's list API
+- [x] Breezy HR (`{slug}.breezy.hr/json`)
+- [x] BambooHR (career pages via generic scrape path)
+- [x] Pinpoint (`{slug}.pinpointhq.com/postings.json`)
+- [x] Rippling (`api.rippling.com/.../board/{slug}/jobs`)
+- [x] Full-board discovery: enumerate all open postings from a company career page (`--discover`)
+- [x] LinkedIn guest job-search API (no login)
 
 ## Extraction
 - [ ] Fixture-based regression tests (live posting, closed ATS API posting, SPA shell with embedded JSON, block page, duplicates, malformed responses)

@@ -38,6 +38,28 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-dedupe", action="store_true",
                         help="Keep cross-board duplicates instead of "
                              "dropping them")
+    parser.add_argument("--linkedin", default=None, metavar="KEYWORDS",
+                        help="Search LinkedIn jobs for KEYWORDS and scrape "
+                             "the results")
+    parser.add_argument("--location", default=None,
+                        help="Location filter for --linkedin "
+                             "(e.g. \"Hyderabad, India\")")
+    parser.add_argument("--geo-id", default=None,
+                        help="LinkedIn geoId for --linkedin (more reliable "
+                             "than --location)")
+    parser.add_argument("--limit", type=int, default=25,
+                        help="Max LinkedIn results to scrape (default 25)")
+    parser.add_argument("--days", type=int, default=None,
+                        help="Only LinkedIn postings from the last N days")
+    parser.add_argument("--remote", default=None,
+                        choices=["onsite", "remote", "hybrid"],
+                        help="Work-mode filter for --linkedin")
+    parser.add_argument("--discover", action="append", default=[],
+                        metavar="BOARD:ID",
+                        help="Enumerate every open posting on a company's "
+                             "career portal, e.g. --discover lever:spotify "
+                             "--discover workday:acme:wd3:acme_ext "
+                             "(repeatable)")
     return parser
 
 
@@ -49,6 +71,47 @@ def main(argv: list[str] | None = None) -> int:
         with open(args.urlfile, encoding="utf-8") as fh:
             urls += [line.strip() for line in fh
                      if line.strip() and not line.startswith("#")]
+
+    if args.discover:
+        from jobscraper.boards import DISCOVERERS
+        for spec in args.discover:
+            board, _, ident = spec.partition(":")
+            discover = DISCOVERERS.get(board.lower())
+            if not discover:
+                print(f"error: unknown board '{board}' for --discover "
+                      f"(choose from: {', '.join(sorted(DISCOVERERS))})",
+                      file=sys.stderr)
+                return 2
+            try:
+                found = discover(ident)
+            except Exception as exc:
+                print(f"discover {spec} failed: {exc}", file=sys.stderr)
+                continue
+            print(f"discover {spec}: {len(found)} postings")
+            urls += found
+
+    if args.linkedin:
+        from jobscraper.sources.linkedin import search_jobs
+        added = 0
+        start = 0
+        while added < args.limit:
+            cards = search_jobs(args.linkedin, location=args.location,
+                                geo_id=args.geo_id, start=start,
+                                remote=args.remote,
+                                posted_within_days=args.days)
+            if not cards:
+                break
+            for card in cards:
+                if card["url"] not in urls:
+                    urls.append(card["url"])
+                    added += 1
+                    if added >= args.limit:
+                        break
+            start += 10
+            if len(cards) < 10:
+                break
+        print(f"linkedin: {added} postings for '{args.linkedin}'")
+
     if not urls:
         print("error: give URLs or --urls file", file=sys.stderr)
         return 2

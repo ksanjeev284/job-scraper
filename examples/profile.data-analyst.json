@@ -1,0 +1,49 @@
+{
+  "certs": [
+    "Google Data Analytics Professional"
+  ],
+  "current_ctc_lpa": 14.0,
+  "custom_skills": [
+    "Looker",
+    "Mode Analytics"
+  ],
+  "locations": [
+    "Mumbai",
+    "Pune",
+    "Remote"
+  ],
+  "name": "Example Candidate",
+  "role_tiers": {
+    "tier1": [
+      "data analyst",
+      "business analyst",
+      "analytics engineer"
+    ],
+    "tier2": [
+      "data scientist",
+      "bi analyst",
+      "reporting analyst"
+    ],
+    "tier3": [
+      "data engineer",
+      "ml engineer"
+    ]
+  },
+  "skills": [
+    "Python",
+    "SQL",
+    "Excel",
+    "Pandas",
+    "NumPy",
+    "Statistics",
+    "A/B testing",
+    "Tableau",
+    "Power BI",
+    "dbt",
+    "Airflow",
+    "PostgreSQL",
+    "Snowflake",
+    "Git"
+  ],
+  "years_total": 3.5
+}

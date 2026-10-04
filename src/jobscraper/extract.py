@@ -167,9 +167,15 @@ def extract_requirements(
     return req, nice, resp, other
 
 
-def find_skills(text: str) -> list[str]:
-    """Detect skill-vocabulary hits in text (word-boundary matched)."""
-    return [s for s in SKILL_VOCAB
+def find_skills(text: str, extra_skills: tuple[str, ...] = ()) -> list[str]:
+    """Detect skill-vocabulary hits in text (word-boundary matched).
+
+    ``extra_skills`` extends the built-in vocabulary, e.g. from a
+    candidate profile's ``custom_skills`` list.
+    """
+    vocab = list(SKILL_VOCAB) + [s for s in extra_skills
+                                 if s not in SKILL_VOCAB]
+    return [s for s in vocab
             if re.search(r"(?<![A-Za-z])" + re.escape(s) + r"(?![A-Za-z])",
                          text, re.I)]
 

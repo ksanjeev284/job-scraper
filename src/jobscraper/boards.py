@@ -12,7 +12,10 @@ import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 
-from jobscraper.http import http_get
+import requests
+
+from jobscraper.http import get_ua, http_get, polite_wait
+from jobscraper.sources.linkedin import fetch_linkedin
 
 # A fetcher maps a posting URL to a normalized posting dict, or None.
 Fetcher = Callable[[str], dict | None]
@@ -270,6 +273,179 @@ def fetch_workable(url: str) -> dict | None:
     return None
 
 
+def fetch_breezy(url: str) -> dict | None:
+    """Breezy HR: public board feed at {tenant}.breezy.hr/json.
+
+    Matches https://{tenant}.breezy.hr/p/{id} style posting URLs; the
+    position page itself carries JobPosting JSON-LD for the description.
+    """
+    match = re.search(r"https://([\w-]+)\.breezy\.hr/p/([\w-]+)", url)
+    if not match:
+        return None
+    tenant, position_id = match.groups()
+    feed = http_get(f"https://{tenant}.breezy.hr/json",
+                    max_retries=2).json()
+    for item in feed if isinstance(feed, list) else []:
+        if position_id not in (item.get("url") or ""):
+            continue
+        loc = item.get("location") or {}
+        loc_name = loc.get("name") if isinstance(loc, dict) else loc
+        return {
+            "title": item.get("name"),
+            "company": tenant,
+            "location": loc_name,
+            "employment_type": (item.get("type") or {}).get("name")
+            if isinstance(item.get("type"), dict) else item.get("type"),
+            "department": None,
+            "description_html": "",  # pipeline falls back to page scrape
+            "posted": item.get("published_date"),
+            "position_url": item.get("url"),
+            "source": "breezy-feed",
+        }
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Discovery: enumerate every open posting on a company's career portal.
+# Each discoverer takes a board-specific identifier and returns posting URLs.
+# ---------------------------------------------------------------------------
+
+def discover_lever(company: str) -> list[str]:
+    data = http_get(f"https://api.lever.co/v0/postings/{company}?mode=json",
+                    max_retries=2).json()
+    if not isinstance(data, list):
+        return []
+    return [p["hostedUrl"] for p in data if p.get("hostedUrl")]
+
+
+def discover_ashby(company: str) -> list[str]:
+    data = http_get("https://api.ashbyhq.com/posting-api/job-board/"
+                    f"{company}?includeCompensation=true",
+                    max_retries=2).json()
+    return [j.get("jobUrl") for j in data.get("jobs", [])
+            if j.get("jobUrl")]
+
+
+def discover_greenhouse(board_token: str) -> list[str]:
+    data = http_get("https://boards-api.greenhouse.io/v1/boards/"
+                    f"{board_token}/jobs", max_retries=2).json()
+    return [j.get("absolute_url") for j in data.get("jobs", [])
+            if j.get("absolute_url")]
+
+
+def discover_smartrecruiters(company: str) -> list[str]:
+    data = http_get("https://api.smartrecruiters.com/v1/companies/"
+                    f"{company}/postings?limit=100", max_retries=2).json()
+    out = []
+    for post in data.get("content", []):
+        ref = post.get("ref") or ""
+        if ref.startswith("https://jobs.smartrecruiters.com/"):
+            out.append(ref)
+    return out
+
+
+def discover_workday(spec: str) -> list[str]:
+    """spec: tenant:dc:site  (e.g. covestro:wd3:cov_external)."""
+    tenant, dc, site = spec.split(":")
+    base = f"https://{tenant}.{dc}.myworkdayjobs.com/wday/cxs/{tenant}/{site}"
+    urls: list[str] = []
+    offset = 0
+    while True:  # Workday search is a POST with a JSON body
+        polite_wait(base, base=1.5)
+        resp = requests.post(
+            base + "/jobs",
+            json={"searchText": "", "appliedFacets": {},
+                  "limit": 100, "offset": offset},
+            headers={"User-Agent": get_ua()},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        postings = data.get("jobPostings", [])
+        if not postings:
+            break
+        for posting in postings:
+            path = (posting.get("externalPath") or "").lstrip("/")
+            if path:
+                urls.append(f"https://{tenant}.{dc}.myworkdayjobs.com/"
+                            f"{site}/job/{path}")
+        offset += len(postings)
+        if offset >= data.get("total", 0):
+            break
+    return urls
+
+
+def discover_teamtailor(host: str) -> list[str]:
+    feed = http_get(f"https://{host}/jobs.json?per_page=100",
+                    max_retries=2).json()
+    items = feed.get("items", []) if isinstance(feed, dict) else []
+    return [i["url"] for i in items if i.get("url")]
+
+
+def discover_personio(company: str) -> list[str]:
+    xml_text = http_get(f"https://{company}.jobs.personio.de/xml",
+                        max_retries=2).text
+    root = ET.fromstring(xml_text)
+    return [f"https://{company}.jobs.personio.de/job/"
+            f"{(p.findtext('id') or '').strip()}"
+            for p in root.iter("position") if p.findtext("id")]
+
+
+def discover_recruitee(company: str) -> list[str]:
+    data = http_get(f"https://{company}.recruitee.com/api/offers/",
+                    max_retries=2).json()
+    offers = data.get("offers", []) if isinstance(data, dict) else []
+    return [o.get("careers_url") or o.get("url") for o in offers
+            if o.get("careers_url") or o.get("url")]
+
+
+def discover_workable(company: str) -> list[str]:
+    data = http_get("https://apply.workable.com/api/v1/widget/accounts/"
+                    f"{company}?details=true", max_retries=2).json()
+    jobs = data.get("jobs", []) if isinstance(data, dict) else []
+    return [f"https://apply.workable.com/{company}/j/{j['shortcode']}/"
+            for j in jobs if j.get("shortcode")]
+
+
+def discover_breezy(tenant: str) -> list[str]:
+    feed = http_get(f"https://{tenant}.breezy.hr/json",
+                    max_retries=2).json()
+    return [i["url"] for i in feed
+            if isinstance(feed, list) and i.get("url")]
+
+
+def discover_pinpoint(slug: str) -> list[str]:
+    data = http_get(f"https://{slug}.pinpointhq.com/postings.json",
+                    max_retries=2).json()
+    items = data if isinstance(data, list) else data.get("postings", [])
+    return [i.get("url") or i.get("absolute_url") for i in items
+            if i.get("url") or i.get("absolute_url")]
+
+
+def discover_rippling(slug: str) -> list[str]:
+    data = http_get("https://api.rippling.com/platform/api/ats/v1/board/"
+                    f"{slug}/jobs", max_retries=2).json()
+    jobs = data.get("jobs", []) if isinstance(data, dict) else []
+    return [f"https://ats.rippling.com/{slug}/jobs/{j['id']}"
+            for j in jobs if j.get("id")]
+
+
+DISCOVERERS: dict[str, object] = {
+    "lever": discover_lever,
+    "ashby": discover_ashby,
+    "greenhouse": discover_greenhouse,
+    "smartrecruiters": discover_smartrecruiters,
+    "workday": discover_workday,
+    "teamtailor": discover_teamtailor,
+    "personio": discover_personio,
+    "recruitee": discover_recruitee,
+    "workable": discover_workable,
+    "breezy": discover_breezy,
+    "pinpoint": discover_pinpoint,
+    "rippling": discover_rippling,
+}
+
+
 BOARD_FETCHERS: list[Fetcher] = [
     fetch_lever,
     fetch_ashby,
@@ -280,4 +456,6 @@ BOARD_FETCHERS: list[Fetcher] = [
     fetch_personio,
     fetch_recruitee,
     fetch_workable,
+    fetch_breezy,
+    fetch_linkedin,
 ]

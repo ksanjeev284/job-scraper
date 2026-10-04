@@ -197,7 +197,9 @@ def process_url(url: str, use_cache: bool = True,
     post.posted = meta.get("posted")
     post.age_days = posting_age_days(post.posted)
     post.via = meta.get("source") or post.fetch_method
-    post.skills_found = find_skills(full_text)
+    custom_skills = tuple(profile.get("custom_skills", [])
+                          ) if profile else ()
+    post.skills_found = find_skills(full_text, custom_skills)
     post.experience_years_mentioned = find_experience(full_text)
     post.salary_hits = extract_salary(full_text)
     for extra in meta.get("salary_hits_extra") or []:

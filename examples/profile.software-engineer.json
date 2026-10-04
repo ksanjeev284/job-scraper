@@ -1,0 +1,58 @@
+{
+  "certs": [
+    "AWS Certified Solutions Architect"
+  ],
+  "current_ctc_lpa": 22.0,
+  "custom_skills": [
+    "Next.js",
+    "FastAPI",
+    "gRPC"
+  ],
+  "locations": [
+    "Bengaluru",
+    "Hyderabad",
+    "Remote"
+  ],
+  "name": "Example Candidate",
+  "role_tiers": {
+    "tier1": [
+      "backend engineer",
+      "software engineer",
+      "platform engineer"
+    ],
+    "tier2": [
+      "fullstack",
+      "full-stack",
+      "devops engineer",
+      "sre"
+    ],
+    "tier3": [
+      "frontend engineer",
+      "mobile engineer",
+      "qa engineer"
+    ]
+  },
+  "skills": [
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "Go",
+    "SQL",
+    "React",
+    "Node.js",
+    "Django",
+    "REST",
+    "GraphQL",
+    "PostgreSQL",
+    "Redis",
+    "Kafka",
+    "Docker",
+    "Kubernetes",
+    "AWS",
+    "Terraform",
+    "CI/CD",
+    "Git",
+    "Linux"
+  ],
+  "years_total": 5.0
+}

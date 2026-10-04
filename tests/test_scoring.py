@@ -72,3 +72,35 @@ def test_posting_age_days_formats():
     assert posting_age_days("2026-10-01") in (2, 3, 4)
     assert posting_age_days("not a date") is None
     assert posting_age_days(None) is None
+
+
+def test_role_tiers_from_profile(tmp_path):
+    data = {
+        "skills": ["Python"],
+        "years_total": 5,
+        "locations": ["Remote"],
+        "role_tiers": {
+            "tier1": ["backend engineer"],
+            "tier2": ["devops engineer"],
+            "tier3": ["qa engineer"],
+        },
+    }
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(data))
+    profile = load_profile(str(path))
+
+    backend = _posting(title="Backend Engineer")
+    backend.location = "Remote"
+    devops = _posting(title="DevOps Engineer")
+    devops.location = "Remote"
+    assert (score_posting(backend, profile).breakdown["role_relevance"]
+            == 5)
+    assert (score_posting(devops, profile).breakdown["role_relevance"]
+            == 4)
+
+
+def test_custom_skills_extend_vocab():
+    from jobscraper.extract import find_skills
+    assert "Next.js" in find_skills("We use Next.js daily.",
+                                    ("Next.js",))
+    assert "Next.js" not in find_skills("We use Next.js daily.")

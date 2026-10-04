@@ -7,11 +7,13 @@ Scores a posting 0-100 against a candidate profile JSON:
 - seniority 15 — title seniority vs profile level
 - certifications 10 — profile certs mentioned vs missing required certs
 - location 5 — preferred locations
-- role_relevance 5 — role tier keywords
+- role_relevance 5 — role tier keywords (configurable per profile)
 - compensation 5 — listed salary vs current CTC
 
-The profile is plain JSON (see ``examples/profile.example.json``);
-pass ``--profile`` to use your own. Nothing personal is bundled.
+The profile is plain JSON (see ``examples/``); pass ``--profile`` to use
+your own. Role relevance tiers come from the profile's ``role_tiers``
+(tier1/tier2/tier3 keyword lists) so the scorer works for any profession.
+Nothing personal is bundled.
 """
 
 from __future__ import annotations
@@ -26,18 +28,25 @@ CERTS_LACKED_RE = re.compile(
     r"\b(OSCP|OSCE|CISSP|CISM|CISA|CEH|GSEC|GCIA|GCIH|GPEN|GXPN|"
     r"Security\+|CySA\+|CASP|SC-200|SC-100|AZ-500|GCLD|CCSP)\b")
 
-TIER1_RE = re.compile(r"(siem|splunk|detection engineer|security engineer"
-                      r"|detection & response|threat detection)", re.I)
-TIER2_RE = re.compile(r"(soc|incident response|threat hunt|blue team|"
-                      r"vulnerability management|security operation|"
-                      r"threat intel|cloud security)", re.I)
-TIER3_RE = re.compile(r"(appsec|application security|product security|"
-                      r"devsecops|api security)", re.I)
+# Default tiers for security roles; any profile can override with its own
+# "role_tiers": {"tier1": [...], "tier2": [...], "tier3": [...]} keyword lists.
+DEFAULT_ROLE_TIERS = {
+    "tier1": ["siem", "splunk", "detection engineer", "security engineer",
+              "detection & response", "threat detection"],
+    "tier2": ["soc", "incident response", "threat hunt", "blue team",
+              "vulnerability management", "security operation",
+              "threat intel", "cloud security"],
+    "tier3": ["appsec", "application security", "product security",
+              "devsecops", "api security"],
+}
 
-OVERSEAS_RE = re.compile(r"(germany|berlin|munich|europe|\buk\b|london|"
-                         r"netherlands|amsterdam|united states|usa)",
-                         re.I)
 
+def _tier_regex(profile: dict, tier: str) -> re.Pattern | None:
+    keywords = (profile.get("role_tiers") or {}).get(tier) \
+        or DEFAULT_ROLE_TIERS[tier]
+    if not keywords:
+        return None
+    return re.compile("|".join(re.escape(k) for k in keywords), re.I)
 
 def load_profile(path: str | None) -> dict:
     """Load a candidate profile JSON file (or the bundled example)."""
@@ -131,18 +140,19 @@ def score_posting(post: Posting, profile: dict) -> MatchResult:
         breakdown["location"] = 5
     elif any(c in loc for c in pref_locs):
         breakdown["location"] = 4
-    elif "india" in loc:
-        breakdown["location"] = 3
-    elif loc and OVERSEAS_RE.search(loc):
-        breakdown["location"] = 2
+    elif loc and "remote" in loc:
+        breakdown["location"] = 4
     else:
         breakdown["location"] = 3
 
-    if TIER1_RE.search(title):
+    tier1 = _tier_regex(profile, "tier1")
+    tier2 = _tier_regex(profile, "tier2")
+    tier3 = _tier_regex(profile, "tier3")
+    if tier1 and tier1.search(title):
         breakdown["role_relevance"] = 5
-    elif TIER2_RE.search(title):
+    elif tier2 and tier2.search(title):
         breakdown["role_relevance"] = 4
-    elif TIER3_RE.search(title):
+    elif tier3 and tier3.search(title):
         breakdown["role_relevance"] = 2
     else:
         breakdown["role_relevance"] = 2
@@ -172,9 +182,9 @@ def fit_summary(post: Posting, profile: dict) -> list[str]:
         bullets.append("Fit: " + ", ".join(match.matched_skills[:8]))
     exp = post.experience_years_mentioned
     if exp:
-        bullets.append(f"Asks {min(exp)}-{max(exp)} yrs; you have "
-                       f"{profile.get('years_total')} total / "
-                       f"{profile.get('years_soc')} SOC")
+        years_total = profile.get("years_total")
+        have = f"{years_total}" if years_total is not None else "?"
+        bullets.append(f"Asks {min(exp)}-{max(exp)} yrs; you have {have}")
     if match and match.skill_gaps:
         bullets.append("Watch: " + ", ".join(match.skill_gaps[:5]))
     if post.signals.get("german_required"):
