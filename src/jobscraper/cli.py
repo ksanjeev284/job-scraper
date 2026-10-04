@@ -130,6 +130,26 @@ def build_parser() -> argparse.ArgumentParser:
                         metavar="CATEGORY",
                         help="Server-side category filter for "
                              "--themuse-search (e.g. \"Data Science\")")
+    parser.add_argument("--freehire-search", default=None,
+                        metavar="KEYWORDS",
+                        help="Search freehire.me's aggregated postings "
+                             "(~50 ATS platforms, public no-auth API) "
+                             "for KEYWORDS and scrape the results; the "
+                             "API returns full descriptions, so no "
+                             "per-posting page fetch is needed")
+    parser.add_argument("--freehire-remote", default=None,
+                        choices=["remote", "hybrid", "onsite"],
+                        help="Server-side work-mode filter for "
+                             "--freehire-search")
+    parser.add_argument("--freehire-country", default=None,
+                        metavar="CC",
+                        help="Server-side country filter for "
+                             "--freehire-search (ISO-3166 alpha-2, "
+                             "e.g. \"DE\")")
+    parser.add_argument("--freehire-category", default=None,
+                        metavar="CATEGORY",
+                        help="Server-side category filter for "
+                             "--freehire-search (e.g. \"backend\")")
     parser.add_argument("--hn-hiring", default=None, metavar="KEYWORDS",
                         help="Search the current month's \"Ask HN: Who is "
                              "hiring?\" thread (Hacker News, public no-auth "
@@ -149,7 +169,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "tagged with the role that surfaced it")
     parser.add_argument("--role-sweep-source", default="linkedin",
                         choices=["linkedin", "remote-boards",
-                                 "workable-search", "themuse-search"],
+                                 "workable-search", "themuse-search",
+                                 "freehire-search"],
                         help="Which keyword search backs --role-sweep "
                              "(default: linkedin)")
     parser.add_argument("--list-roles", action="store_true",
@@ -163,7 +184,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "than --location)")
     parser.add_argument("--limit", type=int, default=25,
                         help="Max --linkedin/--remote-boards/--workable-search/"
-                             "--themuse-search/--hn-hiring results to scrape "
+                             "--themuse-search/--hn-hiring/--freehire-search "
+                             "results to scrape "
                              "(per role for --role-sweep; default 25)")
     parser.add_argument("--days", type=int, default=None,
                         help="Only LinkedIn postings from the last N days")
@@ -696,6 +718,11 @@ def main(argv: list[str] | None = None) -> int:
                 return [c["url"] for c in
                         search_workable(keywords, limit=limit)
                         if c.get("url")]
+            if source == "freehire-search":
+                from jobscraper.sources.freehire import search_freehire
+                return [c["url"] for c in
+                        search_freehire(keywords, limit=limit)
+                        if c.get("url")]
             from jobscraper.sources.themuse import search_themuse
             return [c["url"] for c in
                     search_themuse(keywords,
@@ -727,6 +754,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     hn_postings = []
+    freehire_postings = []
+    extra_sources: list[tuple[str, list, object]] = []
     hn_stat = None
     if args.hn_hiring:
         from jobscraper.models import SourceStat
@@ -753,8 +782,39 @@ def main(argv: list[str] | None = None) -> int:
                                           if p.error]))
         print(f"hn-hiring: {len(hn_postings)} postings for "
               f"'{args.hn_hiring}' ({thread['title']})")
+        extra_sources.append(("hn", hn_postings, hn_stat))
 
-    if not urls and not hn_postings:
+    freehire_stat = None
+    if args.freehire_search:
+        from jobscraper.models import SourceStat
+        from jobscraper.sources.freehire import (
+            build_postings as build_freehire_postings,
+        )
+        from jobscraper.sources.freehire import (
+            search_freehire,
+        )
+        try:
+            cards = search_freehire(
+                args.freehire_search, limit=args.limit,
+                remote=args.freehire_remote,
+                country=args.freehire_country,
+                category=args.freehire_category)
+        except Exception as exc:
+            print(f"freehire-search FAILED: {exc}", file=sys.stderr)
+            return 1
+        freehire_postings = build_freehire_postings(
+            cards, profile=profile, tracker_path=args.tracker,
+            no_score=args.no_score)
+        freehire_stat = SourceStat(
+            name="freehire",
+            attempted=len(cards),
+            ok=len([p for p in freehire_postings if not p.error]),
+            errored=len([p for p in freehire_postings if p.error]))
+        print(f"freehire-search: {len(freehire_postings)} postings for "
+              f"'{args.freehire_search}'")
+        extra_sources.append(("freehire", freehire_postings, freehire_stat))
+
+    if not urls and not extra_sources:
         print("error: give URLs or --urls file", file=sys.stderr)
         return 2
 
@@ -773,7 +833,8 @@ def main(argv: list[str] | None = None) -> int:
     def progress(done: int, total: int) -> None:
         print(f"[{done}/{total}]", flush=True)
 
-    before = len(urls) + len(hn_postings)
+    before = (len(urls)
+              + sum(len(postings) for _, postings, _ in extra_sources))
     results, new_count, closed, stats = run_pipeline(
         urls, profile=profile, tracker_path=args.tracker,
         no_score=args.no_score, use_cache=not args.no_cache,
@@ -792,18 +853,19 @@ def main(argv: list[str] | None = None) -> int:
         browser_pool=args.browser_pool,
         detect_reposts=args.detect_reposts,
         progress_cb=progress, run_stats=True)
-    if hn_postings:
-        # HN comments arrive as finished postings (no page to fetch),
-        # so they get the same post-processing the pipeline applies to
-        # URL results: dedupe, filters, repost flags and watch state.
+    # Search APIs that return full posting bodies (HN comments,
+    # freehire results) arrive as finished postings (no page to fetch),
+    # so each gets the same post-processing the pipeline applies to
+    # URL results: dedupe, filters, repost flags and watch state.
+    for _label, extra_postings, extra_stat in extra_sources:
         from jobscraper.pipeline import (
             apply_filters,
             apply_watch,
             dedupe_results,
         )
         from jobscraper.reposts import mark_reposts
-        posts = (dedupe_results(hn_postings)
-                 if not args.no_dedupe else hn_postings)
+        posts = (dedupe_results(extra_postings)
+                 if not args.no_dedupe else extra_postings)
         from jobscraper.dedupe import (
             fuzzy_dedupe_from_env,
             fuzzy_dedupe_results,
@@ -825,11 +887,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.detect_reposts:
             mark_reposts(results)
         if args.watch:
-            posts, hn_new, hn_closed = apply_watch(posts, args.watch)
-            new_count += hn_new
-            closed.extend(hn_closed)
-        if hn_stat is not None:
-            stats.append(hn_stat)
+            posts, extra_new, extra_closed = apply_watch(posts, args.watch)
+            new_count += extra_new
+            closed.extend(extra_closed)
+        if extra_stat is not None:
+            stats.append(extra_stat)
     after = sum(1 for p in results if not p.error)
     if before - after:
         print(f"Filtered {before - after} posting(s) out")

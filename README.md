@@ -14,10 +14,11 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Remote-only boards** — RemoteOK, Remotive, We Work Remotely, Working Nomads, Jobicy, Arbeitnow and Himalayas (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
 - **Workable cross-board search** — one keyword query across *every* Workable-hosted career board (jobs.workable.com public API): `jobscraper --workable-search "security engineer" --limit 20`
 - **The Muse cross-board search** — one keyword query across The Muse's aggregated listings (themuse.com public API): `jobscraper --themuse-search "security engineer" --themuse-location "India" --limit 20` (keywords match the title, company, level/category tags and description; `--themuse-location` and `--themuse-category` narrow results server-side)
+- **freehire cross-ATS search** — one keyword query across freehire.me's aggregated postings from ~50 ATS platforms (public no-auth JSON API, server-side keyword + work-mode/country/category/seniority facets): `jobscraper --freehire-search "security engineer" --freehire-remote remote --freehire-country DE --limit 20` (the API returns each posting's full description, so no per-posting page fetch is needed; the employer's original ATS apply link is kept in the posting's fetch notes)
 - **Hacker News "Who is hiring?" search** — scrape the current month's *Ask HN: Who is hiring?* thread (public Algolia + Firebase HN APIs, no auth): `jobscraper --hn-hiring "security engineer" --limit 20` (keywords match the title, company and comment text; `--hn-month YYYY-MM` pins a thread, `--hn-max-comments N` caps comment fetches)
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover eightfold:paypal:paypal.com`
 - **Seed-board registry** — `--discover-seeds fintech` sweeps a curated, live-verified registry of company career boards by category (`--list-seeds` shows it); omit the category to sweep them all
-- **Target-role sweeps** — `--role-sweep cybersecurity --role-sweep-source linkedin` runs one keyword search per curated role in the category (see `--list-roles`; 16 profession-neutral categories, 120+ roles in `src/jobscraper/data/target_roles.json`) and tags every posting with the role that surfaced it (`search_role` in JSON/CSV/Excel/HTML/JSONL/RSS/markdown); the sweep source can be `linkedin`, `remote-boards`, `workable-search` or `themuse-search`, and `--limit` applies per role
+- **Target-role sweeps** — `--role-sweep cybersecurity --role-sweep-source linkedin` runs one keyword search per curated role in the category (see `--list-roles`; 16 profession-neutral categories, 120+ roles in `src/jobscraper/data/target_roles.json`) and tags every posting with the role that surfaced it (`search_role` in JSON/CSV/Excel/HTML/JSONL/RSS/markdown); the sweep source can be `linkedin`, `remote-boards`, `workable-search`, `themuse-search` or `freehire-search`, and `--limit` applies per role
 - **16 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling, Eightfold AI, join.com, Radancy (TalentBrew) — public APIs/feeds, no login. Pinpoint posting URLs (`pinpointhq.com/.../jobs/<id>` and `.../postings/<uuid>`) resolve to full structured postings straight from the no-auth feed (title, description HTML, benefits, workplace/employment type, location, visible compensation), so `--discover pinpoint:slug` boards no longer fall back to the generic scraper
 - **Anti-block fallbacks** — stealth headless Chromium (Playwright) after plain HTTP fails, with bot-challenge detection, per-domain rate limiting, user-agent rotation, retries with backoff, and a 24h page cache. `--browser-pool` (or `JOBSCRAPER_BROWSER_POOL=1`) reuses one browser per worker thread for the whole run instead of launching a fresh Chromium per posting — faster multi-posting runs, with a fresh cookie/storage context per posting and idle browsers shut down automatically
 - **Liveness verdicts** — classifies each posting as LIVE / CLOSED / unknown with a reason; closed postings are detected from page text *and* board-API 404s
@@ -146,19 +147,23 @@ the candidate profile used for match scoring.
 | `--themuse-search KEYWORDS` | search The Muse's aggregated listings (themuse.com, public no-auth API) and scrape results |
 | `--themuse-location TEXT` | server-side location filter for `--themuse-search` (e.g. `"India"`) |
 | `--themuse-category TEXT` | server-side category filter for `--themuse-search` (e.g. `"Data Science"`) |
+| `--freehire-search KEYWORDS` | search freehire.me's aggregated postings (~50 ATS platforms, public no-auth API) and scrape results |
+| `--freehire-remote MODE` | server-side work-mode filter for `--freehire-search` (`remote`, `hybrid`, `onsite`) |
+| `--freehire-country CC` | server-side country filter for `--freehire-search` (ISO-3166 alpha-2, e.g. `"DE"`) |
+| `--freehire-category TEXT` | server-side category filter for `--freehire-search` (e.g. `"backend"`) |
 | `--hn-hiring KEYWORDS` | search the month's "Ask HN: Who is hiring?" thread (Hacker News, public no-auth APIs) and scrape matching comments as postings |
 | `--hn-month YYYY-MM` | which Who-is-hiring thread to scrape (default: current month) |
 | `--hn-max-comments N` | max top-level HN comments to fetch for `--hn-hiring` (default 300) |
 | `--location TEXT` | location filter for `--linkedin` |
 | `--geo-id ID` | LinkedIn geoId for `--linkedin` (more reliable than text) |
-| `--limit N` | max search results to scrape for `--linkedin` / `--remote-boards` / `--workable-search` / `--themuse-search` / `--hn-hiring` (per role for `--role-sweep`; default 25) |
+| `--limit N` | max search results to scrape for `--linkedin` / `--remote-boards` / `--workable-search` / `--themuse-search` / `--hn-hiring` / `--freehire-search` (per role for `--role-sweep`; default 25) |
 | `--days N` | only LinkedIn postings from the last N days |
 | `--remote MODE` | `onsite` / `remote` / `hybrid` filter for `--linkedin` |
 | `--discover BOARD:ID` | enumerate a career portal (repeatable; see below) |
 | `--discover-seeds [CATEGORY]` | sweep the verified seed-board registry (see below; category optional) |
 | `--list-seeds` | list the seed registry and exit |
 | `--role-sweep CATEGORY` | sweep every curated role in CATEGORY (see `--list-roles`): one keyword search per role, each posting tagged with the role that surfaced it |
-| `--role-sweep-source SOURCE` | keyword search backing `--role-sweep`: `linkedin`, `remote-boards`, `workable-search`, `themuse-search` (default `linkedin`) |
+| `--role-sweep-source SOURCE` | keyword search backing `--role-sweep`: `linkedin`, `remote-boards`, `workable-search`, `themuse-search`, `freehire-search` (default `linkedin`) |
 | `--list-roles` | list the curated role-sweep categories and their roles, then exit |
 | `--locations "A,B"` | preferred locations for this run (overrides profile) |
 | `--location-filter TEXT` | keep only postings whose location contains TEXT |
