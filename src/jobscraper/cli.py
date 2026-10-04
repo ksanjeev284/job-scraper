@@ -190,6 +190,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "(comma-separated): intern, entry, mid, senior, "
                              "staff, lead, manager, director, executive, "
                              "unknown; e.g. --seniority senior,staff")
+    parser.add_argument("--job-type", default=None, metavar="TYPE[,TYPE]",
+                        help="Keep only postings with these canonical job "
+                             "types: full-time, part-time, contract, "
+                             "temporary, internship, other, unknown; "
+                             "e.g. --job-type full-time,contract")
     parser.add_argument("--min-salary", default=None, metavar="AMOUNT",
                         help="Keep only postings whose salary range can "
                              "reach AMOUNT (annual), e.g. --min-salary "
@@ -640,6 +645,7 @@ def main(argv: list[str] | None = None) -> int:
         exclude_companies=args.exclude_companies,
         exclude_keywords=args.exclude_keywords,
         min_score=args.min_score, seniority=args.seniority,
+        job_type=args.job_type,
         salary_min=args.min_salary, salary_max=args.max_salary,
         max_age=args.max_age,
         watch_path=args.watch,

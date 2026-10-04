@@ -67,6 +67,7 @@ class ScrapeRequest(BaseModel):
     min_score: int | None = None
     salary_min: str | None = None
     salary_max: str | None = None
+    job_type: str | None = None
     max_age: int | None = None
     workers: int = 4
     respect_robots: bool = False
@@ -135,6 +136,7 @@ def _run_job(job_id: str, urls: list[str], req: ScrapeRequest) -> None:
             exclude_keywords=req.exclude_keywords,
             min_score=req.min_score,
             salary_min=req.salary_min, salary_max=req.salary_max,
+            job_type=req.job_type,
             max_age=req.max_age,
             respect_robots=req.respect_robots,
             progress_cb=progress)

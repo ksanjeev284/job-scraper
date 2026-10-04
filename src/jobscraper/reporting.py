@@ -46,7 +46,8 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
         lines.append(f"## {post.title or '(no title)'}")
         lines.append(f"- Company: {post.company or '?'}")
         lines.append(f"- Location: {post.location or '?'}")
-        lines.append(f"- Type: {post.employment_type or '?'}")
+        lines.append(f"- Type: {post.employment_type or '?'} "
+                     f"(canonical: {post.job_type or 'unknown'})")
         lines.append(f"- URL: {post.url}")
         if post.is_live is True:
             lines.append(f"- Status: LIVE ({post.live_reason})")
@@ -135,7 +136,7 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
 def _spreadsheet_headers() -> list[str]:
     """Column headers shared by the CSV and Excel exports."""
     return ["score", "live", "age_days", "title", "company", "location",
-            "type", "seniority", "exp_years", "salary", "matched_skills",
+            "type", "job_type", "seniority", "exp_years", "salary", "matched_skills",
             "skill_gaps", "fit_summary", "benefits", "sponsorship",
             "german_required", "work_mode", "tracker", "applied", "repost",
             "url"]
@@ -154,6 +155,7 @@ def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
         post.company or "",
         post.location or "",
         post.employment_type or "",
+        post.job_type or "",
         post.seniority or "",
         ",".join(map(str, post.experience_years_mentioned)),
         "; ".join(post.salary_hits),
@@ -364,7 +366,8 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
         parts.append(f"<h2>{_esc(post.title)}</h2>")
         meta = [f"Company: {_esc(post.company)}",
                 f"Location: {_esc(post.location)}",
-                f"Type: {_esc(post.employment_type)}",
+                f"Type: {_esc(post.employment_type)} "
+                f"({_esc(post.job_type or 'unknown')})",
                 f"Seniority: {_esc(post.seniority or 'unknown')}"]
         if post.age_days is not None:
             meta.append(f"Posted: {post.age_days} days ago")
@@ -505,6 +508,8 @@ def write_rss(posts: list[Posting], path: str, profile: dict) -> None:
         lines.append(f"<category>{_esc(company)}</category>")
         if post.seniority:
             lines.append(f"<category>{_esc(post.seniority)}</category>")
+        if post.job_type and post.job_type != "unknown":
+            lines.append(f"<category>job-type:{_esc(post.job_type)}</category>")
         if post.is_new:
             lines.append("<category>new</category>")
         lines.append("</item>")

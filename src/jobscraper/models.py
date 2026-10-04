@@ -82,6 +82,7 @@ class Posting:
     company: str | None = None
     location: str | None = None
     employment_type: str | None = None
+    job_type: str = "unknown"
     department: str | None = None
     posted: str | None = None
     age_days: int | None = None

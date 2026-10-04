@@ -39,6 +39,7 @@ from jobscraper.extract import (
     split_sections,
 )
 from jobscraper.http import configure_robots, robots_from_env
+from jobscraper.jobtype import normalize_job_type, parse_job_type_filter
 from jobscraper.models import Posting, Section, SourceStat
 from jobscraper.rendering import (
     BrowserPool,
@@ -120,6 +121,7 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  exclude_keywords: str | None = None,
                  min_score: int | None = None,
                  seniority: str | None = None,
+                 job_type: str | None = None,
                  salary_min: str | None = None,
                  salary_max: str | None = None,
                  max_age: int | None = None,
@@ -207,6 +209,7 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     results = apply_filters(results, location_filter, keyword_filter,
                             exclude_companies, exclude_keywords,
                             seniority_filter=seniority,
+                            job_type_filter=job_type,
                             salary_min=salary_min, salary_max=salary_max,
                             max_age=max_age)
     if min_score is not None:
@@ -257,6 +260,7 @@ def apply_filters(posts: list[Posting],
                   exclude_companies: str | None = None,
                   exclude_keywords: str | None = None,
                   seniority_filter: str | None = None,
+                  job_type_filter: str | None = None,
                   salary_min: str | None = None,
                   salary_max: str | None = None,
                   max_age: int | None = None) -> list[Posting]:
@@ -267,6 +271,10 @@ def apply_filters(posts: list[Posting],
     (all case-insensitive); ``seniority_filter`` keeps only postings whose
     inferred seniority level is in the comma-separated list (postings with
     an unknown level are dropped unless ``unknown`` is listed).
+    ``job_type_filter`` keeps only postings whose canonical job type
+    (``full-time``, ``part-time``, ``contract``, ``temporary``,
+    ``internship``, ``other``, ``unknown``) is in the comma-separated list
+    (unknown job types are dropped unless ``unknown`` is listed).
     ``salary_min``/``salary_max`` are threshold specs like ``"80K USD"`` or
     ``"25 LPA"``: postings whose salary range cannot reach the minimum (or
     whose range bottom exceeds the maximum) are dropped, while postings
@@ -280,6 +288,7 @@ def apply_filters(posts: list[Posting],
     ex_companies = _split_csv(exclude_companies)
     ex_keywords = _split_csv(exclude_keywords)
     seniority_levels = set(_split_csv(seniority_filter))
+    job_types = parse_job_type_filter(job_type_filter)
     min_threshold = parse_salary_threshold(salary_min) if salary_min else None
     max_threshold = parse_salary_threshold(salary_max) if salary_max else None
     if max_age is not None and max_age < 0:
@@ -300,6 +309,8 @@ def apply_filters(posts: list[Posting],
                 and post.age_days > max_age):
             return False
         if seniority_levels and post.seniority not in seniority_levels:
+            return False
+        if job_types and post.job_type not in job_types:
             return False
         if loc_filter and loc_filter not in (post.location or "").lower():
             return False
@@ -496,6 +507,8 @@ def process_url(url: str, use_cache: bool = True,
                                post.experience_years_mentioned)
     post.seniority = seniority.level
     post.seniority_evidence = seniority.evidence
+    post.job_type = normalize_job_type(post.employment_type, post.title,
+                                       full_text)
     post.salary_hits = extract_salary(full_text)
     post.salary_normalized = normalize_salary(post.salary_hits)
     for extra in meta.get("salary_hits_extra") or []:
