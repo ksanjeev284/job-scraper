@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import html as html_lib
+import json
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 
@@ -488,3 +489,20 @@ def write_rss(posts: list[Posting], path: str, profile: dict) -> None:
     lines += ["</channel>", "</rss>", ""]
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
+
+
+def write_jsonl(posts: list[Posting], path: str, profile: dict) -> None:
+    """Write the ranked results as JSON Lines: one full posting per line.
+
+    Every line is one JSON object (UTF-8, non-ASCII preserved) carrying the
+    full posting record plus a 1-based ``rank`` field, best score first.
+    Unscored postings sort last with a null score. One record per line means
+    the file streams through ``jq``/``grep`` and appends cleanly across runs
+    (``>>``) without re-parsing a JSON array.
+    """
+    ranked = _export_order(posts)
+    with open(path, "w", encoding="utf-8") as fh:
+        for rank, post in enumerate(ranked, start=1):
+            record = {"rank": rank}
+            record.update(post.to_dict())
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")

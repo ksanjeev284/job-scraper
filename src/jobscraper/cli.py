@@ -11,6 +11,7 @@ from jobscraper.pipeline import run_pipeline
 from jobscraper.reporting import (
     write_csv,
     write_html,
+    write_jsonl,
     write_markdown,
     write_rss,
     write_xlsx,
@@ -43,6 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rss", default=None,
                         help="RSS 2.0 feed export path (ranked by match "
                              "score, for feed readers)")
+    parser.add_argument("--jsonl", default=None,
+                        help="JSON Lines export path: one full posting "
+                             "record per line, ranked by match score")
     parser.add_argument("--no-cache", action="store_true",
                         help="Ignore the local page cache and refetch")
     parser.add_argument("--workers", type=int, default=4,
@@ -365,6 +369,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.rss:
         write_rss(results, args.rss, profile)
         print(f"RSS:  {args.rss}")
+    if args.jsonl:
+        write_jsonl(results, args.jsonl, profile)
+        print(f"JSONL: {args.jsonl}")
 
     from jobscraper.notify import (
         deliver,
