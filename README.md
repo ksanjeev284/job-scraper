@@ -13,6 +13,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **LinkedIn as a source** — public guest job-search API (no login): `jobscraper --linkedin "soc analyst" --location "Hyderabad, India" --days 30`
 - **Remote-only boards** — RemoteOK, Remotive, We Work Remotely and Working Nomads (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover greenhouse:acme`
+- **Seed-board registry** — `--discover-seeds fintech` sweeps a curated, live-verified registry of company career boards by category (`--list-seeds` shows it); omit the category to sweep them all
 - **13 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling — public APIs/feeds, no login
 - **Anti-block fallbacks** — stealth headless Chromium (Playwright) after plain HTTP fails, with bot-challenge detection, per-domain rate limiting, user-agent rotation, retries with backoff, and a 24h page cache
 - **Liveness verdicts** — classifies each posting as LIVE / CLOSED / unknown with a reason; closed postings are detected from page text *and* board-API 404s
@@ -95,6 +96,8 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--days N` | only LinkedIn postings from the last N days |
 | `--remote MODE` | `onsite` / `remote` / `hybrid` filter for `--linkedin` |
 | `--discover BOARD:ID` | enumerate a career portal (repeatable; see below) |
+| `--discover-seeds [CATEGORY]` | sweep the verified seed-board registry (see below; category optional) |
+| `--list-seeds` | list the seed registry and exit |
 | `--locations "A,B"` | preferred locations for this run (overrides profile) |
 | `--location-filter TEXT` | keep only postings whose location contains TEXT |
 | `--keyword-filter "A,B"` | keep only postings whose title contains a keyword |
@@ -212,7 +215,20 @@ Discovery (`--discover BOARD:ID`) enumerates a whole career portal first:
 | `pinpoint` | slug | `pinpoint:acme` |
 | `rippling` | board slug | `rippling:acme` |
 
-Layout: `src/jobscraper/` — `boards.py` (ATS APIs + discovery), `sources/linkedin.py` (LinkedIn guest API), `sources/remote_boards.py` (RemoteOK/Remotive/WWR/Working Nomads remote boards), `extract.py` (parsing), `scoring.py` (match scores), `rendering.py` (browser/HTTP fetch), `pipeline.py` (orchestration), `reporting.py` (outputs), `cli.py`, `models.py`, `http.py` (network plumbing).
+Seed-board sweeps (`--discover-seeds`) automate discovery across a curated
+registry of verified company boards (`src/jobscraper/data/seeds.json` —
+every entry was live-verified to enumerate postings when added; a stale
+board yields nothing and never aborts the sweep):
+
+```bash
+jobscraper --list-seeds                        # show the registry + categories
+jobscraper --discover-seeds fintech            # sweep every fintech seed board
+jobscraper --discover-seeds ai --keyword-filter "security engineer" \
+  --locations "Remote"                         # narrow the sweep like any run
+jobscraper --discover-seeds                    # sweep every seed board
+```
+
+Layout: `src/jobscraper/` — `boards.py` (ATS APIs + discovery), `seeds.py` (curated verified-board registry), `sources/linkedin.py` (LinkedIn guest API), `sources/remote_boards.py` (RemoteOK/Remotive/WWR/Working Nomads remote boards), `extract.py` (parsing), `scoring.py` (match scores), `rendering.py` (browser/HTTP fetch), `pipeline.py` (orchestration), `reporting.py` (outputs), `cli.py`, `models.py`, `http.py` (network plumbing).
 
 ## What it doesn't cover
 

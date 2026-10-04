@@ -10,7 +10,7 @@ Planned improvements, in rough priority order.
 - [x] Full-board discovery: enumerate all open postings from a company career page (`--discover`)
 - [x] LinkedIn guest job-search API (no login)
 - [x] Remote-only boards (RemoteOK, Remotive, WeWorkRemotely, Working Nomads — JobSpy-style remote presets; `--remote-boards KEYWORDS`, client-side keyword filtering, cross-board de-dupe)
-- [ ] Curated seed registry of verified company boards for `--discover` sweeps
+- [x] Curated seed registry of verified company boards for `--discover` sweeps (`src/jobscraper/data/seeds.json`, 12 live-verified boards; `--discover-seeds CATEGORY`, `--list-seeds`)
 
 ## Extraction
 - [x] Structured benefits extraction (health, PTO, bonus, equity)

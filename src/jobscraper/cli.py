@@ -68,6 +68,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "career portal, e.g. --discover lever:spotify "
                              "--discover workday:acme:wd3:acme_ext "
                              "(repeatable)")
+    parser.add_argument("--discover-seeds", nargs="?", const="*",
+                        default=None, metavar="CATEGORY",
+                        help="Sweep the curated registry of verified company "
+                             "career boards for one category, e.g. "
+                             "--discover-seeds fintech (omit the category "
+                             "to sweep every seed; combine with "
+                             "--keyword-filter to narrow results)")
+    parser.add_argument("--list-seeds", action="store_true",
+                        help="List the curated seed registry of verified "
+                             "company career boards and exit")
     parser.add_argument("--locations", default=None, metavar="\"A,B\"",
                         help="Comma-separated preferred locations for this "
                              "run; overrides the profile's locations in "
@@ -124,6 +134,23 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
+    if args.list_seeds:
+        from jobscraper.seeds import SeedError, categories, load_seeds
+        try:
+            seeds = load_seeds()
+        except SeedError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"{'COMPANY':<16}{'BOARD':<14}{'CATEGORY':<18}SPEC")
+        for seed in sorted(seeds, key=lambda s: s.name.lower()):
+            print(f"{seed.name:<16}{seed.board:<14}"
+                  f"{','.join(seed.categories):<18}{seed.spec}")
+        print(f"\n{len(seeds)} seeds, categories: "
+              f"{', '.join(categories(seeds))}")
+        print("Sweep a category: "
+              "jobscraper --discover-seeds CATEGORY --keyword-filter X")
+        return 0
+
     from jobscraper.http import configure_proxies, load_proxies_file, proxies_from_env
     proxy_specs = list(args.proxy)
     if args.proxies_file:
@@ -166,6 +193,23 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             print(f"discover {spec}: {len(found)} postings")
             urls += found
+
+    if args.discover_seeds is not None:
+        from jobscraper.seeds import SeedError, discover_seeds, seeds_for
+        category = None if args.discover_seeds == "*" else args.discover_seeds
+        try:
+            seeds = seeds_for(category)
+        except SeedError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"discover-seeds: sweeping {len(seeds)} verified boards"
+              + (f" (category: {category})" if category else ""))
+        found = discover_seeds(seeds)
+        for spec, seed_urls in found.items():
+            print(f"discover {spec}: {len(seed_urls)} postings")
+            for url in seed_urls:
+                if url not in urls:
+                    urls.append(url)
 
     if args.linkedin:
         from jobscraper.sources.linkedin import search_jobs

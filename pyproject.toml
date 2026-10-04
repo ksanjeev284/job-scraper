@@ -46,7 +46,7 @@ Issues = "https://github.com/ksanjeev284/job-scraper/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-jobscraper = ["static/*.html"]
+jobscraper = ["static/*.html", "data/*.json"]
 
 [tool.ruff]
 target-version = "py310"
