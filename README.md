@@ -273,6 +273,21 @@ jobscraper --urls urls.txt --watch state.json
   the bot from your account and read your chat id from
   `https://api.telegram.org/bot<TOKEN>/getUpdates`. Credentials are
   never logged.
+- `--webhook-mode ntfy` sends one push notification per run via ntfy
+  (https://ntfy.sh/docs): no account needed, just a topic. Ranked
+  postings are plain-text lines with their scores and a [NEW] marker,
+  capped at the 4096-byte ntfy message limit; the notification title
+  carries the run summary, and tapping the notification opens the
+  top-ranked posting. It needs only the topic from
+  `JOBSCRAPER_NTFY_TOPIC` (or `--ntfy-topic`); the server defaults to
+  `https://ntfy.sh` and can be a self-hosted instance via
+  `JOBSCRAPER_NTFY_SERVER` (or `--ntfy-server`); an optional access
+  token comes from `JOBSCRAPER_NTFY_TOKEN` (or `--ntfy-token`) and is
+  sent as a Bearer header; priority is one of `low`/`default`/`high`
+  via `JOBSCRAPER_NTFY_PRIORITY` (or `--ntfy-priority`).
+  `--webhook-url` is ignored in this mode, and the topic and token
+  never appear in logs. Tip: subscribe to the topic in the ntfy app
+  (or a browser at https://ntfy.sh/<topic>) to get instant alerts.
 - `--webhook-mode email` sends one SMTP digest email per run (a plain
   + HTML multipart message): the ranked postings as clickable job
   cards with title, company, location, score, seniority, salary hits

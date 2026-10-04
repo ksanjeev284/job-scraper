@@ -24,6 +24,20 @@ more user-supplied webhook URLs. Three payload modes are supported:
   Bot API ``sendMessage`` endpoint, so ``--webhook-url`` is ignored in
   this mode. One message per run listing the ranked postings with their
   URLs (plain text, no formatting, so no Markdown escaping edge cases).
+- ``ntfy`` — a push notification via ntfy (https://ntfy.sh/docs).
+  The only credential is the topic name, resolved from
+  ``JOBSCRAPER_NTFY_TOPIC`` (or ``--ntfy-topic``); no account is needed
+  for public ntfy.sh, and a self-hosted server can be used via
+  ``JOBSCRAPER_NTFY_SERVER`` (or ``--ntfy-server``), defaulting to
+  https://ntfy.sh. An access token may be passed with
+  ``JOBSCRAPER_NTFY_TOKEN`` (or ``--ntfy-token``) and is sent as a
+  Bearer header. Priority defaults to ``default`` and can be one of
+  low/default/high via ``JOBSCRAPER_NTFY_PRIORITY`` (or
+  ``--ntfy-priority``). The message is plain text (one line per ranked
+  posting), the notification title carries the summary, and tapping it
+  opens the top-ranked posting via the ``Click`` action. One message per
+  run; ``--webhook-url`` is ignored in this mode. The topic name is
+  never logged in full — details carry only the server host.
 
 Additionally, a fixed-endpoint ``email`` channel (not a webhook mode)
 sends one SMTP digest per run: an HTML email with the ranked postings
@@ -53,7 +67,8 @@ from urllib.parse import urlencode, urlsplit
 
 from jobscraper.models import Posting
 
-WebhookMode = Literal["plain", "slack", "discord", "pushover", "telegram"]
+WebhookMode = Literal["plain", "slack", "discord", "pushover", "telegram",
+                      "ntfy"]
 
 _TIMEOUT_SECONDS = 15
 _MAX_SLACK_BLOCKS = 50
@@ -403,6 +418,171 @@ def send_telegram(posts: list[Posting], *, token: str | None = None,
         return None, "skipped: no new postings"
     return _post_telegram(
         _TELEGRAM_ENDPOINT_TEMPLATE.format(token=resolved_token), fields)
+
+
+# --- ntfy push-notification channel ---------------------------------------------
+
+# One plain-text push message per run via ntfy (https://ntfy.sh/docs):
+# a POST to {server}/{topic}. The topic name IS the credential — treat it
+# like one and never log it in full; only the server host appears in logs.
+# Message bodies are capped at 4096 bytes (ntfy.sh's default per-message
+# limit), the notification title carries the run summary, and the Click
+# action opens the top-ranked posting.
+_NTFY_SERVER_ENV = "JOBSCRAPER_NTFY_SERVER"
+_NTFY_TOPIC_ENV = "JOBSCRAPER_NTFY_TOPIC"
+_NTFY_TOKEN_ENV = "JOBSCRAPER_NTFY_TOKEN"
+_NTFY_PRIORITY_ENV = "JOBSCRAPER_NTFY_PRIORITY"
+_NTFY_DEFAULT_SERVER = "https://ntfy.sh"
+_NTFY_PRIORITIES = ("low", "default", "high")
+_MAX_NTFY_MESSAGE = 4096
+
+
+def ntfy_endpoint(server: str | None, topic: str | None) -> str:
+    """Build the ntfy publish URL from a server and topic.
+
+    Defaults to https://ntfy.sh when no server is given; the topic is
+    mandatory. Raises ``ValueError`` when the server scheme is not
+    http(s) or the topic is missing/empty. The returned URL is only
+    ever passed to the HTTP layer — never to logs.
+    """
+    server = (server or "").strip() or _NTFY_DEFAULT_SERVER
+    scheme = urlsplit(server).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(
+            f"ntfy server must be an http(s) URL, got {scheme!r}")
+    topic = (topic or "").strip().strip("/")
+    if not topic or any(ch in topic for ch in " ?#"):
+        raise ValueError(
+            "ntfy mode needs a topic: missing "
+            f"{_NTFY_TOPIC_ENV} (or --ntfy-topic)")
+    return f"{server.rstrip('/')}/{topic}"
+
+
+def ntfy_credentials(server: str | None = None,
+                     topic: str | None = None,
+                     token: str | None = None,
+                     priority: str | None = None,
+                     ) -> tuple[str, str, str | None, str]:
+    """Resolve the ntfy server, topic, optional access token, and priority.
+
+    Explicit arguments win; each falls back to its environment variable
+    (``JOBSCRAPER_NTFY_SERVER`` / ``JOBSCRAPER_NTFY_TOPIC`` /
+    ``JOBSCRAPER_NTFY_TOKEN`` / ``JOBSCRAPER_NTFY_PRIORITY``).
+    The topic is mandatory and raises ``ValueError`` when missing; the
+    priority must be one of ``low``/``default``/``high``. The topic and
+    token are never logged or echoed.
+    """
+    server = (server or os.environ.get(_NTFY_SERVER_ENV, "").strip()
+              or _NTFY_DEFAULT_SERVER)
+    topic = (topic or os.environ.get(_NTFY_TOPIC_ENV, "").strip())
+    token = (token or os.environ.get(_NTFY_TOKEN_ENV, "").strip()) or None
+    resolved_priority = (
+        (priority or os.environ.get(_NTFY_PRIORITY_ENV, "").strip())
+        or "default")
+    if resolved_priority not in _NTFY_PRIORITIES:
+        raise ValueError(
+            "ntfy priority must be one of "
+            f"{'/'.join(_NTFY_PRIORITIES)}, got {resolved_priority!r}")
+    endpoint = ntfy_endpoint(server, topic)
+    return endpoint, resolved_priority, token, topic
+
+
+def build_ntfy_payload(posts: list[Posting], *,
+                       only_new: bool = False,
+                       top: int = 25) -> dict | None:
+    """Build the ntfy publish fields for a set of postings.
+
+    One notification per run: the title carries the run summary and the
+    message body lists the ranked postings, one per line, with their
+    scores and a NEW marker where watch mode flagged them. ``click``
+    opens the top-ranked posting; ``tags`` mark new-posting runs so
+    they stand out in the ntfy app. Returns ``None`` when ``only_new``
+    is set and nothing is new.
+    """
+    ranked = _ranked(posts)
+    new_posts = [p for p in ranked if p.is_new]
+    selected = (new_posts if only_new else ranked)[:top]
+    if only_new and not new_posts:
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    summary = (f"{len(new_posts)} new" if new_posts
+               else f"{len(ranked)} ranked")
+    title = f"Job scrape — {summary} ({stamp})"
+    lines = []
+    for post in selected:
+        post_title, company, location, score = _display(post)
+        marker = " [NEW]" if post.is_new else ""
+        lines.append(f"{post_title} — {company} · {location} · "
+                     f"score {score}{marker}")
+    message = "\n".join(lines)[:_MAX_NTFY_MESSAGE] or "(no postings)"
+    tags = ["briefcase"] + (["bell"] if new_posts else [])
+    return {
+        "title": title,
+        "message": message,
+        "click": selected[0].url if selected else "",
+        "tags": tags,
+    }
+
+
+def _post_ntfy(endpoint: str, fields: dict,
+               token: str | None) -> tuple[bool, str]:
+    """POST a plain-text message to an ntfy publish endpoint.
+
+    Notification metadata travels in headers (``Title``, ``Priority``,
+    ``Click``, ``Tags``); the access token, when set, is sent as an
+    ``Authorization: Bearer`` header. ``detail`` carries only the
+    server host — never the endpoint path, which contains the topic —
+    and never the message body or token.
+    """
+    host = host_of(endpoint)
+    headers = {
+        "Content-Type": "text/plain; charset=utf-8",
+        "User-Agent": "job-scraper/1.0",
+        "Title": fields["title"].encode("utf-8", errors="replace"),
+        "Priority": fields["priority"].encode("ascii", errors="replace"),
+        "Tags": ",".join(fields["tags"]).encode("ascii",
+                                                errors="replace"),
+    }
+    if fields.get("click"):
+        headers["Click"] = fields["click"].encode("utf-8",
+                                                  errors="replace")
+    if token:
+        headers["Authorization"] = f"Bearer {token}".encode(
+            "utf-8", errors="replace")
+    request = urllib.request.Request(
+        endpoint, data=fields["message"].encode("utf-8"),
+        method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(request,
+                                    timeout=_TIMEOUT_SECONDS) as response:
+            status = getattr(response, "status", 200)
+    except urllib.error.HTTPError as exc:
+        return False, f"{host}: HTTP {exc.code}"
+    except OSError as exc:
+        return False, f"{host}: {exc.__class__.__name__}: {exc}"
+    if 200 <= status < 300:
+        return True, f"{host}: delivered ({len(fields['message'])} chars)"
+    return False, f"{host}: HTTP {status}"
+
+
+def send_ntfy(posts: list[Posting], *, server: str | None = None,
+              topic: str | None = None, token: str | None = None,
+              priority: str | None = None, only_new: bool = False,
+              top: int = 25) -> tuple[bool | None, str]:
+    """Send one ntfy push notification for a set of postings.
+
+    Returns ``(ok, detail)``; ``ok`` is ``None`` when ``only_new`` is set
+    and nothing is new (nothing worth pushing). Raises ``ValueError``
+    when the topic is missing or the priority/server is invalid. The
+    topic and token never appear in results, logs, or error strings.
+    """
+    endpoint, resolved_priority, resolved_token, _topic = ntfy_credentials(
+        server=server, topic=topic, token=token, priority=priority)
+    fields = build_ntfy_payload(posts, only_new=only_new, top=top)
+    if fields is None:
+        return None, "skipped: no new postings"
+    fields["priority"] = resolved_priority
+    return _post_ntfy(endpoint, fields, resolved_token)
 
 
 # --- SMTP email digest channel ------------------------------------------------

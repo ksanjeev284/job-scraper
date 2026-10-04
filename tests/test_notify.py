@@ -11,13 +11,17 @@ import pytest
 from jobscraper.models import MatchResult, Posting
 from jobscraper.notify import (
     build_email_message,
+    build_ntfy_payload,
     build_payload,
     build_pushover_payload,
     build_telegram_payload,
     deliver,
     host_of,
+    ntfy_credentials,
+    ntfy_endpoint,
     pushover_credentials,
     send_email_digest,
+    send_ntfy,
     send_pushover,
     send_telegram,
     send_webhook,
@@ -135,6 +139,8 @@ def test_send_webhook_rejects_non_http():
 class _Capture(BaseHTTPRequestHandler):
     received: list[bytes] = []
     content_types: list[str] = []
+    paths: list[str] = []
+    headers_seen: list[dict] = []
     status: int = 200
 
     def do_POST(self):  # noqa: N802
@@ -142,6 +148,8 @@ class _Capture(BaseHTTPRequestHandler):
         _Capture.received.append(self.rfile.read(length))
         _Capture.content_types.append(
             self.headers.get("Content-Type", ""))
+        _Capture.paths.append(self.path)
+        _Capture.headers_seen.append(dict(self.headers.items()))
         self.send_response(_Capture.status)
         self.end_headers()
 
@@ -710,3 +718,174 @@ def test_cli_offers_email_webhook_mode():
         capture_output=True, text=True, timeout=30, cwd=".")
     assert proc.returncode == 0
     assert "email" in proc.stdout
+
+
+# --- ntfy push-notification channel -----------------------------------------
+
+
+def _ntfy_posts() -> list[Posting]:
+    return [_posting("analyst", 80, is_new=True), _posting("dev", 40)]
+
+
+def test_ntfy_payload_shape_and_ranking():
+    payload = build_ntfy_payload(_ntfy_posts())
+    assert payload is not None
+    assert "Job scrape" in payload["title"]
+    assert "1 new" in payload["title"]
+    lines = payload["message"].splitlines()
+    assert len(lines) == 2
+    assert lines[0].startswith("analyst")  # best score first
+    assert "[NEW]" in lines[0]
+    assert "score 80" in lines[0]
+    assert "score 40" in lines[1]
+    # tapping the notification opens the top-ranked posting
+    assert payload["click"] == "https://example.com/jobs/analyst"
+    assert "bell" in payload["tags"]  # new postings flagged
+
+
+def test_ntfy_payload_no_new_no_bell_tag():
+    posts = [_posting("a", 70), _posting("b", 50)]
+    payload = build_ntfy_payload(posts)
+    assert payload is not None
+    assert "bell" not in payload["tags"]
+    assert "[NEW]" not in payload["message"]
+
+
+def test_ntfy_payload_only_new_filters():
+    posts = [_posting("old", 90), _posting("fresh", 50, is_new=True)]
+    payload = build_ntfy_payload(posts, only_new=True)
+    assert payload is not None
+    assert "1 new" in payload["title"]
+    assert payload["message"].splitlines()[0].startswith("fresh")
+    assert payload["click"] == "https://example.com/jobs/fresh"
+
+
+def test_ntfy_payload_only_new_nothing_new_returns_none():
+    assert build_ntfy_payload([_posting("old", 90)], only_new=True) is None
+
+
+def test_ntfy_message_capped_at_limit():
+    posts = [_posting(f"job{i} " + "x" * 500, i) for i in range(30)]
+    payload = build_ntfy_payload(posts)
+    assert payload is not None
+    assert len(payload["message"]) <= 4096
+
+
+def test_ntfy_endpoint_defaults_to_ntfy_sh():
+    assert ntfy_endpoint(None, "job-alerts") == (
+        "https://ntfy.sh/job-alerts")
+
+
+def test_ntfy_endpoint_self_hosted_and_normalization():
+    assert ntfy_endpoint("http://10.0.0.5:8080/", " /mytopic/ ") == (
+        "http://10.0.0.5:8080/mytopic")
+
+
+def test_ntfy_endpoint_bad_scheme_raises():
+    with pytest.raises(ValueError, match="http"):
+        ntfy_endpoint("ftp://example.com", "topic")
+
+
+def test_ntfy_endpoint_missing_topic_raises():
+    for bad in (None, "", "   ", "//"):
+        with pytest.raises(ValueError, match="topic"):
+            ntfy_endpoint(None, bad)
+
+
+def test_ntfy_credentials_from_env(monkeypatch):
+    monkeypatch.setenv("JOBSCRAPER_NTFY_SERVER", "https://ntfy.example.com")
+    monkeypatch.setenv("JOBSCRAPER_NTFY_TOPIC", "alerts-9")
+    monkeypatch.setenv("JOBSCRAPER_NTFY_TOKEN", "toksecret")
+    monkeypatch.setenv("JOBSCRAPER_NTFY_PRIORITY", "high")
+    endpoint, priority, token, topic = ntfy_credentials()
+    assert endpoint == "https://ntfy.example.com/alerts-9"
+    assert priority == "high"
+    assert token == "toksecret"
+    assert topic == "alerts-9"
+
+
+def test_ntfy_credentials_missing_topic_raises(monkeypatch):
+    monkeypatch.delenv("JOBSCRAPER_NTFY_TOPIC", raising=False)
+    with pytest.raises(ValueError, match="topic"):
+        ntfy_credentials(server="https://ntfy.sh")
+
+
+def test_ntfy_credentials_bad_priority_raises():
+    with pytest.raises(ValueError, match="priority"):
+        ntfy_credentials(server="https://ntfy.sh", topic="t",
+                         priority="urgent")
+
+
+def test_send_ntfy_posts_to_topic_with_headers():
+    _Capture.received.clear()
+    _Capture.paths.clear()
+    _Capture.headers_seen.clear()
+    _Capture.content_types.clear()
+    server, thread = _serve()
+    try:
+        endpoint = f"http://127.0.0.1:{server.server_port}"
+        ok, detail = send_ntfy(
+            _ntfy_posts(), server=endpoint, topic="alerts-9",
+            token="toksecret", priority="high")
+        assert ok, detail
+        assert "127.0.0.1" in detail
+        assert "alerts-9" not in detail  # topic stays out of logs
+        assert _Capture.paths == ["/alerts-9"]
+        headers = _Capture.headers_seen[0]
+        assert "Job scrape" in headers["Title"]
+        assert headers["Priority"] == "high"
+        assert headers["Click"] == "https://example.com/jobs/analyst"
+        assert headers["Authorization"] == "Bearer toksecret"
+        assert headers["Tags"] == "briefcase,bell"
+        body = _Capture.received[0].decode()
+        assert "analyst" in body and "score 80" in body
+        assert "[NEW]" in body
+        assert _Capture.content_types[0].startswith("text/plain")
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_send_ntfy_no_token_no_auth_header():
+    _Capture.headers_seen.clear()
+    _Capture.paths.clear()
+    _Capture.received.clear()
+    _Capture.content_types.clear()
+    server, thread = _serve()
+    try:
+        endpoint = f"http://127.0.0.1:{server.server_port}"
+        ok, detail = send_ntfy(_ntfy_posts(), server=endpoint,
+                               topic="alerts-9")
+        assert ok, detail
+        assert "Authorization" not in _Capture.headers_seen[0]
+        assert _Capture.headers_seen[0]["Priority"] == "default"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_send_ntfy_connection_refused():
+    ok, detail = send_ntfy([_posting("a", 10)],
+                           server="http://127.0.0.1:1", topic="t")
+    assert not ok
+    assert detail  # non-empty, host-only
+
+
+def test_send_ntfy_only_new_nothing_new_skips():
+    ok, detail = send_ntfy([_posting("old", 90)],
+                           server="https://ntfy.sh", topic="t",
+                           only_new=True)
+    assert ok is None
+    assert "no new postings" in detail
+
+
+def test_cli_offers_ntfy_webhook_mode():
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "jobscraper", "--help"],
+        capture_output=True, text=True, timeout=30, cwd=".")
+    assert proc.returncode == 0
+    assert "ntfy" in proc.stdout
+    assert "--ntfy-topic" in proc.stdout

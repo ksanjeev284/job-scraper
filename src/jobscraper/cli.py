@@ -196,11 +196,30 @@ def build_parser() -> argparse.ArgumentParser:
                              "Slack/Discord/Google Sheets/Notion recipes")
     parser.add_argument("--webhook-mode", default="plain",
                         choices=["plain", "slack", "discord", "pushover",
-                                 "telegram", "email"],
+                                 "telegram", "ntfy", "email"],
                         help="Webhook payload format (default plain; "
                              "slack/discord send a chat notification; "
-                             "pushover/telegram/email send an alert via the "
-                             "Pushover API, a Telegram bot, or SMTP email)")
+                             "pushover/telegram/ntfy/email send an alert "
+                             "via the Pushover API, a Telegram bot, ntfy.sh, "
+                             "or SMTP email)")
+    parser.add_argument("--ntfy-topic", default=None, metavar="TOPIC",
+                        help="ntfy.sh topic name for --webhook-mode ntfy "
+                             "(or JOBSCRAPER_NTFY_TOPIC; the topic is the "
+                             "only credential needed)")
+    parser.add_argument("--ntfy-server", default=None, metavar="URL",
+                        help="ntfy server base URL for --webhook-mode ntfy "
+                             "(default https://ntfy.sh, or "
+                             "JOBSCRAPER_NTFY_SERVER; self-hosted "
+                             "servers welcome)")
+    parser.add_argument("--ntfy-token", default=None, metavar="TOKEN",
+                        help="ntfy access token for --webhook-mode ntfy "
+                             "(or JOBSCRAPER_NTFY_TOKEN; only needed when "
+                             "the topic is access-protected)")
+    parser.add_argument("--ntfy-priority", default=None,
+                        choices=["low", "default", "high"],
+                        help="ntfy message priority for --webhook-mode "
+                             "ntfy (default default, or "
+                             "JOBSCRAPER_NTFY_PRIORITY)")
     parser.add_argument("--pushover-token", default=None, metavar="TOKEN",
                         help="Pushover application token for --webhook-mode "
                              "pushover (or JOBSCRAPER_PUSHOVER_TOKEN)")
@@ -561,12 +580,13 @@ def main(argv: list[str] | None = None) -> int:
     from jobscraper.notify import (
         deliver,
         send_email_digest,
+        send_ntfy,
         send_pushover,
         send_telegram,
         smtp_settings,
         webhook_urls_from_env,
     )
-    if args.webhook_mode in ("pushover", "telegram", "email"):
+    if args.webhook_mode in ("pushover", "telegram", "ntfy", "email"):
         # Direct-notification channels: post to the fixed service endpoint;
         # --webhook-url is ignored in these modes.
         if args.webhook_mode == "pushover":
@@ -577,6 +597,12 @@ def main(argv: list[str] | None = None) -> int:
             sender, name = send_telegram, "Telegram"
             creds = {"token": args.telegram_token,
                      "chat_id": args.telegram_chat_id}
+        elif args.webhook_mode == "ntfy":
+            sender, name = send_ntfy, "ntfy"
+            creds = {"server": args.ntfy_server,
+                     "topic": args.ntfy_topic,
+                     "token": args.ntfy_token,
+                     "priority": args.ntfy_priority}
         else:
             sender, name = send_email_digest, "Email"
             try:
@@ -605,7 +631,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     webhook_urls = list(args.webhook_url) + webhook_urls_from_env()
     if webhook_urls and args.webhook_mode not in ("pushover", "telegram",
-                                                  "email"):
+                                                  "ntfy", "email"):
         seen, deduped = set(), []
         for url in webhook_urls:
             if url not in seen:
