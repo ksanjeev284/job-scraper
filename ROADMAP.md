@@ -10,7 +10,8 @@ Planned improvements, in rough priority order.
 - [x] Full-board discovery: enumerate all open postings from a company career page (`--discover`)
 - [x] LinkedIn guest job-search API (no login)
 - [x] Remote-only boards (RemoteOK, Remotive, WeWorkRemotely, Working Nomads — JobSpy-style remote presets; `--remote-boards KEYWORDS`, client-side keyword filtering, cross-board de-dupe)
-- [x] Curated seed registry of verified company boards for `--discover` sweeps (`src/jobscraper/data/seeds.json`, 12 live-verified boards; `--discover-seeds CATEGORY`, `--list-seeds`)
+- [x] Curated seed registry of verified company boards for `--discover` sweeps (`src/jobscraper/data/seeds.json`, 13 live-verified boards; `--discover-seeds CATEGORY`, `--list-seeds`)
+- [x] Eightfold AI (`{tenant}.eightfold.ai`): whole-board discovery via the public pcsx search API (`--discover eightfold:tenant:domain`, e.g. `eightfold:paypal:paypal.com`; pagination advances through 10-row pages) plus plain-HTTP posting fetch from server-rendered JobPosting JSON-LD; PayPal board added to the seed registry (live-verified, 288 postings on 2026-10-04)
 
 ## Extraction
 - [x] Structured benefits extraction (health, PTO, bonus, equity)

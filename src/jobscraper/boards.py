@@ -11,9 +11,12 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from urllib.parse import quote
 
 import requests
+from bs4 import BeautifulSoup
 
+from jobscraper.extract import parse_json_ld
 from jobscraper.http import get_ua, http_get, polite_wait
 from jobscraper.sources.linkedin import fetch_linkedin
 
@@ -305,10 +308,69 @@ def fetch_breezy(url: str) -> dict | None:
     return None
 
 
+def fetch_eightfold(url: str) -> dict | None:
+    """Eightfold AI: ``{tenant}.eightfold.ai`` career boards.
+
+    Matches e.g. https://paypal.eightfold.ai/careers/job/274922421796
+    (and the /career_detail/<id> variant). Posting pages are
+    server-rendered with JobPosting JSON-LD, so the description is read
+    over plain HTTP with no browser involved.
+    """
+    match = re.search(
+        r"https://([\w-]+)\.eightfold\.ai/(?:careers/job|career_detail)/"
+        r"([\w-]+)", url)
+    if not match:
+        return None
+    html_text = http_get(url, max_retries=2).text
+    meta = parse_json_ld(BeautifulSoup(html_text, "html.parser"))
+    if not meta:
+        raise ValueError("eightfold: no JobPosting structured data on page")
+    meta["source"] = "eightfold-page"
+    meta["position_url"] = url
+    return meta
+
+
 # ---------------------------------------------------------------------------
 # Discovery: enumerate every open posting on a company's career portal.
 # Each discoverer takes a board-specific identifier and returns posting URLs.
 # ---------------------------------------------------------------------------
+
+def discover_eightfold(spec: str) -> list[str]:
+    """Enumerate every open posting on an Eightfold AI board.
+
+    ``spec`` is ``tenant:domain`` (e.g. ``paypal:paypal.com``). Uses
+    Eightfold's public pcsx search API (no auth). The server caps a page
+    at 10 rows regardless of the requested ``num``, so ``start`` advances
+    by the number of rows actually seen.
+    """
+    parts = spec.split(":", 1)
+    if len(parts) != 2 or not all(p.strip() for p in parts):
+        raise ValueError(
+            "eightfold discover spec must be 'tenant:domain', e.g. "
+            f"'eightfold:paypal:paypal.com' (got {spec!r})")
+    tenant, domain = (p.strip() for p in parts)
+    urls: list[str] = []
+    start = 0
+    while True:
+        data = http_get(
+            f"https://{tenant}.eightfold.ai/api/pcsx/search"
+            f"?domain={quote(domain, safe='')}"
+            f"&query=&location=&start={start}&sort_by=timestamp",
+            max_retries=2).json()
+        board = (data or {}).get("data") or {}
+        positions = board.get("positions") or []
+        for pos in positions:
+            path = pos.get("positionUrl") or ""
+            if path.startswith("http"):
+                urls.append(path)
+            elif path.startswith("/"):
+                urls.append(f"https://{tenant}.eightfold.ai{path}")
+        total = board.get("count") or 0
+        start += len(positions)
+        if not positions or start >= total:
+            break
+    return list(dict.fromkeys(urls))
+
 
 def discover_lever(company: str) -> list[str]:
     data = http_get(f"https://api.lever.co/v0/postings/{company}?mode=json",
@@ -443,6 +505,7 @@ DISCOVERERS: dict[str, object] = {
     "breezy": discover_breezy,
     "pinpoint": discover_pinpoint,
     "rippling": discover_rippling,
+    "eightfold": discover_eightfold,
 }
 
 
@@ -457,5 +520,6 @@ BOARD_FETCHERS: list[Fetcher] = [
     fetch_recruitee,
     fetch_workable,
     fetch_breezy,
+    fetch_eightfold,
     fetch_linkedin,
 ]

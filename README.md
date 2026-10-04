@@ -6,15 +6,15 @@
 
 Scrape job postings and extract structured requirements: title, company, location, employment type, posting date, requirements, nice-to-haves, responsibilities, detected skills, experience asked, salary figures, work mode, and more. Scores every posting 0-100 against your candidate profile and reports skill gaps.
 
-Works for any profession: configure your skills, role tiers and locations in a profile JSON. Sources include LinkedIn, 13 ATS career-portal feeds, and any posting URL via a hardened headless browser.
+Works for any profession: configure your skills, role tiers and locations in a profile JSON. Sources include LinkedIn, 14 ATS career-portal feeds, and any posting URL via a hardened headless browser.
 
 ## Features
 
 - **LinkedIn as a source** — public guest job-search API (no login): `jobscraper --linkedin "soc analyst" --location "Hyderabad, India" --days 30`
 - **Remote-only boards** — RemoteOK, Remotive, We Work Remotely and Working Nomads (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
-- **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover greenhouse:acme`
+- **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover eightfold:paypal:paypal.com`
 - **Seed-board registry** — `--discover-seeds fintech` sweeps a curated, live-verified registry of company career boards by category (`--list-seeds` shows it); omit the category to sweep them all
-- **13 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling — public APIs/feeds, no login
+- **14 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling, Eightfold AI — public APIs/feeds, no login
 - **Anti-block fallbacks** — stealth headless Chromium (Playwright) after plain HTTP fails, with bot-challenge detection, per-domain rate limiting, user-agent rotation, retries with backoff, and a 24h page cache. `--browser-pool` (or `JOBSCRAPER_BROWSER_POOL=1`) reuses one browser per worker thread for the whole run instead of launching a fresh Chromium per posting — faster multi-posting runs, with a fresh cookie/storage context per posting and idle browsers shut down automatically
 - **Liveness verdicts** — classifies each posting as LIVE / CLOSED / unknown with a reason; closed postings are detected from page text *and* board-API 404s
 - **Structured extraction** — splits descriptions into headed sections, buckets them into requirements / responsibilities / nice-to-haves, and detects skills, experience years, salary figures, sponsorship mentions, language requirements and work mode; section headings are recognized in English, German, French, Spanish, Dutch and Italian
@@ -282,6 +282,7 @@ Discovery (`--discover BOARD:ID`) enumerates a whole career portal first:
 | `breezy` | tenant | `breezy:acme` |
 | `pinpoint` | slug | `pinpoint:acme` |
 | `rippling` | board slug | `rippling:acme` |
+| `eightfold` | `tenant:domain` | `eightfold:paypal:paypal.com` |
 
 Seed-board sweeps (`--discover-seeds`) automate discovery across a curated
 registry of verified company boards (`src/jobscraper/data/seeds.json` —

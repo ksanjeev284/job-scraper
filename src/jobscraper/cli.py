@@ -80,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Enumerate every open posting on a company's "
                              "career portal, e.g. --discover lever:spotify "
                              "--discover workday:acme:wd3:acme_ext "
+                             "--discover eightfold:paypal:paypal.com "
                              "(repeatable)")
     parser.add_argument("--discover-seeds", nargs="?", const="*",
                         default=None, metavar="CATEGORY",

@@ -57,7 +57,8 @@ def test_discover_workable(monkeypatch):
 def test_discoverers_registry():
     for name in ("lever", "ashby", "greenhouse", "smartrecruiters",
                  "workday", "teamtailor", "personio", "recruitee",
-                 "workable", "breezy", "pinpoint", "rippling"):
+                 "workable", "breezy", "pinpoint", "rippling",
+                 "eightfold"):
         assert name in boards.DISCOVERERS, name
         assert callable(boards.DISCOVERERS[name])
 
