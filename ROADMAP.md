@@ -33,7 +33,7 @@ Planned improvements, in rough priority order.
 - [x] Optional proxy rotation support (`--proxy`, `--proxies-file`, `JOBSCRAPER_PROXIES`; round-robin with failure parking)
 - [x] Respect `robots.txt` per host (opt-in: `--respect-robots` / `JOBSCRAPER_RESPECT_ROBOTS`; per-host 24h cache; disallowed URLs get an explicit error, never a silent skip; missing/unreachable robots.txt = allowed)
 - [x] URL canonicalization (`src/jobscraper/urls.py`): strip tracking params (`utm_*`, `trk`, `gclid`, …), fragments, default ports; lowercase scheme/host; sort remaining query params; path case preserved. Applied at pipeline entry (input dedupe + clean reported URLs) and in the applied-tracker check
-- [ ] Headless-browser pool to reuse Chromium across postings
+- [x] Headless-browser pool (`src/jobscraper/rendering.py` `BrowserPool`): reuse one Chromium per worker thread across postings instead of launching per URL; fresh cookie/storage context per posting (closed afterwards), same anti-bot hardening, idle browsers evicted after 5 min, stats via `pool.stats()`; opt-in with `--browser-pool` / `JOBSCRAPER_BROWSER_POOL=1` (requires the `browser` extra); thread-safe for the pipeline's worker pool
 
 ## Reporting
 - [x] Web GUI service (FastAPI + browser UI, JSON/CSV export, Docker)

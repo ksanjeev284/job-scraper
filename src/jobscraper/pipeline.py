@@ -33,7 +33,14 @@ from jobscraper.extract import (
 )
 from jobscraper.http import configure_robots, robots_from_env
 from jobscraper.models import Posting, Section
-from jobscraper.rendering import fetch_playwright, fetch_requests
+from jobscraper.rendering import (
+    BrowserPool,
+    browser_pool_from_env,
+    clear_default_pool,
+    fetch_playwright,
+    fetch_requests,
+    set_default_pool,
+)
 from jobscraper.scoring import posting_age_days, score_posting
 from jobscraper.seniority import LEVELS as SENIORITY_LEVELS
 from jobscraper.seniority import infer_seniority
@@ -110,6 +117,7 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  seniority: str | None = None,
                  watch_path: str | None = None,
                  respect_robots: bool = False,
+                 browser_pool: bool = False,
                  progress_cb=None) -> tuple[list[Posting], int]:
     """Scrape every URL and return (postings, new_count, closed).
 
@@ -119,7 +127,10 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     seen before that disappeared this run. ``respect_robots`` turns on
     the opt-in robots.txt check (also honored via the
     ``JOBSCRAPER_RESPECT_ROBOTS`` env var); disallowed URLs end with an
-    explicit error on the posting, never a silent skip.
+    explicit error on the posting, never a silent skip. ``browser_pool``
+    (also ``JOBSCRAPER_BROWSER_POOL=1``) keeps one headless Chromium
+    alive per worker thread for the whole run instead of launching a
+    fresh browser per posting; requires the ``browser`` extra.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -138,15 +149,23 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
         except Exception as exc:  # never let one URL kill the run
             return Posting(url=url, error=str(exc)[:300])
 
-    results: list[Posting] = []
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = {pool.submit(work, url): url for url in urls}
-        done = 0
-        for future in as_completed(futures):
-            done += 1
-            if progress_cb:
-                progress_cb(done, len(urls))
-            results.append(future.result())
+    pool = BrowserPool() if (browser_pool or browser_pool_from_env()) else None
+    try:
+        if pool is not None:
+            set_default_pool(pool)
+        results: list[Posting] = []
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
+            futures = {executor.submit(work, url): url for url in urls}
+            done = 0
+            for future in as_completed(futures):
+                done += 1
+                if progress_cb:
+                    progress_cb(done, len(urls))
+                results.append(future.result())
+    finally:
+        if pool is not None:
+            clear_default_pool()
+            pool.shutdown()
     order = {url: i for i, url in enumerate(urls)}
     results.sort(key=lambda post: order.get(post.url, 0))
 

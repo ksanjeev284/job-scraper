@@ -153,6 +153,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "(hosts with no reachable robots.txt are "
                              "treated as allowed; also honored via the "
                              "JOBSCRAPER_RESPECT_ROBOTS env var)")
+    parser.add_argument("--browser-pool", action="store_true",
+                        help="Reuse one headless Chromium per worker "
+                             "thread for the whole run instead of "
+                             "launching a fresh browser per posting "
+                             "(requires the 'browser' extra; also honored "
+                             "via the JOBSCRAPER_BROWSER_POOL env var)")
     return parser
 
 
@@ -306,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         min_score=args.min_score, seniority=args.seniority,
         watch_path=args.watch,
         respect_robots=args.respect_robots,
+        browser_pool=args.browser_pool,
         progress_cb=progress)
     after = sum(1 for p in results if not p.error)
     if before - after:

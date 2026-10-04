@@ -15,7 +15,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover greenhouse:acme`
 - **Seed-board registry** — `--discover-seeds fintech` sweeps a curated, live-verified registry of company career boards by category (`--list-seeds` shows it); omit the category to sweep them all
 - **13 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling — public APIs/feeds, no login
-- **Anti-block fallbacks** — stealth headless Chromium (Playwright) after plain HTTP fails, with bot-challenge detection, per-domain rate limiting, user-agent rotation, retries with backoff, and a 24h page cache
+- **Anti-block fallbacks** — stealth headless Chromium (Playwright) after plain HTTP fails, with bot-challenge detection, per-domain rate limiting, user-agent rotation, retries with backoff, and a 24h page cache. `--browser-pool` (or `JOBSCRAPER_BROWSER_POOL=1`) reuses one browser per worker thread for the whole run instead of launching a fresh Chromium per posting — faster multi-posting runs, with a fresh cookie/storage context per posting and idle browsers shut down automatically
 - **Liveness verdicts** — classifies each posting as LIVE / CLOSED / unknown with a reason; closed postings are detected from page text *and* board-API 404s
 - **Structured extraction** — splits descriptions into headed sections, buckets them into requirements / responsibilities / nice-to-haves, and detects skills, experience years, salary figures, sponsorship mentions, language requirements and work mode; section headings are recognized in English, German, French, Spanish, Dutch and Italian
 - **0-100 match scoring** — against a candidate profile JSON: technical skills (35), experience (25), seniority (15), certifications (10), location (5), role relevance (5), compensation (5); includes skill gaps and a fit/watch summary
@@ -236,7 +236,8 @@ gaps per posting.
 URL
  ├─ board API fast path (Lever, Ashby, Greenhouse, SmartRecruiters,
  │   Workday, Teamtailor, Personio, Recruitee, Workable, Breezy, LinkedIn)
- ├─ else: requests → Playwright, with a content-quality gate
+ ├─ else: requests → Playwright (pooled with `--browser-pool`, else
+ │   one fresh browser per posting), with a content-quality gate
  │   (SPA shells are salvaged via embedded job JSON)
  ├─ JSON-LD JobPosting schema when present
  ├─ extract: sections, skills (+ profile custom_skills), salary,
@@ -298,8 +299,7 @@ so a board API changing shape or an extraction regression shows up here first.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the remaining planned work (non-English
-heading detection, headless-browser pool).
+See [ROADMAP.md](ROADMAP.md) for the remaining planned work.
 
 ## License
 

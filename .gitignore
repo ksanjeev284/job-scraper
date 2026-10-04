@@ -25,5 +25,8 @@ scrape-*.md
 scores.csv
 *.log
 
+# Local agent bookkeeping (feature-loop lock, run state)
+hidden_files/
+
 # CI workflow is managed via the GitHub web UI (OAuth token lacks workflow scope)
 .github/workflows/
