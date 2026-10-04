@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from jobscraper.pipeline import run_pipeline
 from jobscraper.reporting import write_csv, write_markdown
-from jobscraper.scoring import load_profile
+from jobscraper.scoring import load_profile, validate_profile
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -131,6 +131,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     profile = load_profile(args.profile)
+    problems = validate_profile(profile)
+    if problems:
+        print("error: invalid profile "
+              f"({args.profile or 'built-in template'}):", file=sys.stderr)
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        return 2
     if args.locations:
         profile["locations"] = [loc.strip() for loc in
                                 args.locations.split(",") if loc.strip()]

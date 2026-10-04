@@ -58,15 +58,22 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
         if post.match:
             match = post.match
             brk = match.breakdown
-            lines.append(
-                f"- MATCH SCORE: {match.total}/100 "
-                f"(skills {brk['technical_skills']}/35, "
-                f"exp {brk['experience']}/25, "
-                f"seniority {brk['seniority']}/15, "
-                f"certs {brk['certifications']}/10, "
-                f"loc {brk['location']}/5, "
-                f"role {brk['role_relevance']}/5, "
-                f"comp {brk['compensation']}/5)")
+            wts = match.weights or {}
+            parts = []
+            for key, label in (("technical_skills", "skills"),
+                               ("experience", "exp"),
+                               ("seniority", "seniority"),
+                               ("certifications", "certs"),
+                               ("location", "loc"),
+                               ("role_relevance", "role"),
+                               ("compensation", "comp")):
+                denom = wts.get(key)
+                val = (f"{brk.get(key, 0)}/{denom:g}"
+                       if denom else str(brk.get(key, 0)))
+                parts.append(f"{label} {val}")
+            total_denom = (f"{sum(wts.values()):g}" if wts else "100")
+            lines.append(f"- MATCH SCORE: {match.total}/{total_denom} "
+                         f"({', '.join(parts)})")
             lines.append(f"- Matched skills: "
                          f"{', '.join(match.matched_skills) or 'none'}")
             lines.append(f"- Skill gaps: "
@@ -89,7 +96,8 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
         for bucket_title, bucket in (
                 ("Requirements", post.requirements),
                 ("Responsibilities", post.responsibilities),
-                ("Nice to have", post.nice_to_have)):
+                ("Nice to have", post.nice_to_have),
+                ("Benefits", post.benefits)):
             if bucket:
                 lines.append(f"\n### {bucket_title}")
                 for sec in bucket:
@@ -113,6 +121,7 @@ def write_csv(posts: list[Posting], path: str, profile: dict) -> None:
         writer.writerow(["score", "live", "age_days", "title", "company",
                          "location", "type", "exp_years", "salary",
                          "matched_skills", "skill_gaps", "fit_summary",
+                         "benefits",
                          "sponsorship", "german_required", "work_mode",
                          "tracker", "url"])
         for post in ordered:
@@ -132,6 +141,7 @@ def write_csv(posts: list[Posting], path: str, profile: dict) -> None:
                 "; ".join(match.matched_skills) if match else "",
                 "; ".join(match.skill_gaps) if match else "",
                 "; ".join(fit_summary(post, profile)),
+                "; ".join(s.heading for s in post.benefits),
                 "yes" if post.signals.get("sponsorship_mentioned") else "",
                 "yes" if post.signals.get("german_required") else "",
                 ",".join(post.signals.get("work_mode") or []),

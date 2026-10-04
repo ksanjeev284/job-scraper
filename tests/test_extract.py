@@ -130,3 +130,19 @@ def test_parse_embedded_next_data():
 def test_parse_description_html_double_escaped():
     soup = parse_description_html("&lt;p&gt;Hello&lt;/p&gt;")
     assert "Hello" in soup.get_text()
+
+
+def test_extract_benefits():
+    from jobscraper.extract import extract_benefits
+    soup = BeautifulSoup(
+        "<h2>Benefits</h2><p>Health insurance, 401k</p>"
+        "<h2>Requirements</h2><p>Python</p>", "lxml")
+    benefits = extract_benefits(split_sections(soup))
+    assert len(benefits) == 1
+    assert "Health insurance" in benefits[0].text
+
+
+def test_extract_benefits_none():
+    from jobscraper.extract import extract_benefits
+    soup = BeautifulSoup("<h2>Requirements</h2><p>Python</p>", "lxml")
+    assert extract_benefits(split_sections(soup)) == []

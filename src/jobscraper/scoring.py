@@ -31,6 +31,89 @@ CERTS_LACKED_RE = re.compile(
 
 # Default tiers for security roles; any profile can override with its own
 # "role_tiers": {"tier1": [...], "tier2": [...], "tier3": [...]} keyword lists.
+DEFAULT_WEIGHTS = {
+    "technical_skills": 35,
+    "experience": 25,
+    "seniority": 15,
+    "certifications": 10,
+    "location": 5,
+    "role_relevance": 5,
+    "compensation": 5,
+}
+
+_KNOWN_PROFILE_KEYS = {
+    "name", "skills", "custom_skills", "skill_aliases", "years_total",
+    "certs", "locations", "current_ctc_lpa", "role_tiers", "weights",
+}
+
+
+DEFAULT_WEIGHTS = {
+    "technical_skills": 35,
+    "experience": 25,
+    "seniority": 15,
+    "certifications": 10,
+    "location": 5,
+    "role_relevance": 5,
+    "compensation": 5,
+}
+
+_KNOWN_PROFILE_KEYS = {
+    "name", "skills", "custom_skills", "skill_aliases", "years_total",
+    "certs", "locations", "current_ctc_lpa", "role_tiers", "weights",
+}
+
+
+def validate_profile(profile: dict) -> list[str]:
+    """Check a profile dict; return a list of human-readable problems.
+
+    Unknown keys are ignored (forward compatibility); everything else
+    must have the right shape.
+    """
+    errors: list[str] = []
+    if not isinstance(profile, dict):
+        return ["profile must be a JSON object"]
+    for key in ("skills", "custom_skills", "certs", "locations"):
+        val = profile.get(key, [])
+        if not isinstance(val, list) or \
+                not all(isinstance(s, str) for s in val):
+            errors.append(f'"{key}" must be a list of strings')
+    for key in ("years_total", "current_ctc_lpa"):
+        val = profile.get(key, 0)
+        if not isinstance(val, (int, float)) or val < 0:
+            errors.append(f'"{key}" must be a number >= 0')
+    tiers = profile.get("role_tiers")
+    if tiers is not None:
+        if not isinstance(tiers, dict):
+            errors.append('"role_tiers" must be an object')
+        else:
+            for tier in ("tier1", "tier2", "tier3"):
+                val = tiers.get(tier, [])
+                if not isinstance(val, list) or \
+                        not all(isinstance(s, str) for s in val):
+                    errors.append(
+                        f'"role_tiers.{tier}" must be a list of strings')
+    aliases = profile.get("skill_aliases")
+    if aliases is not None:
+        if not isinstance(aliases, dict) or \
+                not all(isinstance(v, list) and
+                        all(isinstance(s, str) for s in v)
+                        for v in aliases.values()):
+            errors.append('"skill_aliases" must map strings to '
+                          'lists of strings')
+    weights = profile.get("weights")
+    if weights is not None:
+        if not isinstance(weights, dict):
+            errors.append('"weights" must be an object')
+        else:
+            for key, val in weights.items():
+                if key not in DEFAULT_WEIGHTS:
+                    errors.append(f'"weights.{key}" is not a known '
+                                  f'component ({", ".join(DEFAULT_WEIGHTS)})')
+                elif not isinstance(val, (int, float)) or val < 0:
+                    errors.append(f'"weights.{key}" must be a number >= 0')
+    return errors
+
+
 DEFAULT_ROLE_TIERS = {
     "tier1": ["siem", "splunk", "detection engineer", "security engineer",
               "detection & response", "threat detection"],
@@ -134,76 +217,79 @@ def score_posting(post: Posting, profile: dict) -> MatchResult:
     profile_certs = {c.lower() for c in profile.get("certs", [])}
     pref_locs = [loc.lower() for loc in profile.get("locations", [])]
     years = float(profile.get("years_total", 0))
+    weights = {**DEFAULT_WEIGHTS, **(profile.get("weights") or {})}
 
-    breakdown: dict[str, int] = {}
+    frac: dict[str, float] = {}
 
-    breakdown["technical_skills"] = min(35, len(matched) * 5)
+    frac["technical_skills"] = min(1.0, len(matched) / 7)
 
     exp = post.experience_years_mentioned
     if not exp:
-        breakdown["experience"] = 15
+        frac["experience"] = 0.6
     else:
         lo, hi = min(exp), max(exp)
         if lo - 1 <= years <= hi + 1:
-            breakdown["experience"] = 25
+            frac["experience"] = 1.0
         elif lo - 2 <= years <= hi + 2:
-            breakdown["experience"] = 15
+            frac["experience"] = 0.6
         else:
-            breakdown["experience"] = 5
+            frac["experience"] = 0.2
 
     if re.search(r"(manager|director|head of|vp|chief)", title):
-        breakdown["seniority"] = 3
+        frac["seniority"] = 0.2
     elif re.search(r"(senior|sr\.|lead|staff|principal)", title):
-        breakdown["seniority"] = 12 if breakdown["experience"] >= 15 else 8
+        frac["seniority"] = 0.8 if frac["experience"] >= 0.6 else 0.53
     elif re.search(r"(junior|jr\.|intern|trainee|\bl1\b)", title):
-        breakdown["seniority"] = 8
+        frac["seniority"] = 0.53
     else:
-        breakdown["seniority"] = 10
+        frac["seniority"] = 0.67
 
     if any(c in text for c in profile_certs):
-        breakdown["certifications"] = 10
+        frac["certifications"] = 1.0
     elif CERTS_LACKED_RE.search(req_text):
-        breakdown["certifications"] = 3
+        frac["certifications"] = 0.3
     else:
-        breakdown["certifications"] = 6
+        frac["certifications"] = 0.6
 
     home = pref_locs[0] if pref_locs else ""
     if home and home in loc:
-        breakdown["location"] = 5
+        frac["location"] = 1.0
     elif any(c in loc for c in pref_locs):
-        breakdown["location"] = 4
+        frac["location"] = 0.8
     elif loc and "remote" in loc:
-        breakdown["location"] = 4
+        frac["location"] = 0.8
     else:
-        breakdown["location"] = 3
+        frac["location"] = 0.6
 
     tier1 = _tier_regex(profile, "tier1")
     tier2 = _tier_regex(profile, "tier2")
     tier3 = _tier_regex(profile, "tier3")
     if tier1 and tier1.search(title):
-        breakdown["role_relevance"] = 5
+        frac["role_relevance"] = 1.0
     elif tier2 and tier2.search(title):
-        breakdown["role_relevance"] = 4
+        frac["role_relevance"] = 0.8
     elif tier3 and tier3.search(title):
-        breakdown["role_relevance"] = 2
+        frac["role_relevance"] = 0.4
     else:
-        breakdown["role_relevance"] = 2
+        frac["role_relevance"] = 0.4
 
     current_ctc = float(profile.get("current_ctc_lpa", 0))
     lpa = [float(m.group(1)) for m in
            re.finditer(r"([\d.]+)\s*(?:lakh|LPA)",
                        " ".join(post.salary_hits), re.I)]
     if lpa and max(lpa) >= current_ctc and current_ctc > 0:
-        breakdown["compensation"] = 5
+        frac["compensation"] = 1.0
     elif post.salary_hits:
-        breakdown["compensation"] = 3
+        frac["compensation"] = 0.6
     else:
-        breakdown["compensation"] = 3
+        frac["compensation"] = 0.6
 
+    breakdown = {k: round(frac[k] * weights[k]) for k in weights}
     return MatchResult(total=sum(breakdown.values()),
                        breakdown=breakdown,
                        matched_skills=matched,
-                       skill_gaps=gaps)
+                       skill_gaps=gaps,
+                       weights=weights)
 
 
 def fit_summary(post: Posting, profile: dict) -> list[str]:

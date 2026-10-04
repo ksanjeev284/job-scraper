@@ -33,6 +33,10 @@ RESP_HEADINGS = re.compile(
     r"(your mission|the role|about the role|responsabilit|what you.?ll do|"
     r"key duties|day to day|what you will own|the opportunity)", re.I)
 
+BENEFITS_HEADINGS = re.compile(
+    r"(benefit|perks|what we offer|why (join|work)|life at|compensation"
+    r"|rewards|what.?s in it for you|employee (benefits|perks))", re.I)
+
 SKILL_VOCAB = [
     "Splunk", "Splunk ES", "Splunk SOAR", "SIEM", "SOC", "SOAR",
     "Python", "Shell", "Bash", "PowerShell", "SQL", "Regex",
@@ -165,6 +169,12 @@ def extract_requirements(
                 sec.text, re.I):
             other.append(sec)
     return req, nice, resp, other
+
+
+def extract_benefits(sections: list[Section]) -> list[Section]:
+    """Pull out benefits/perks sections (health, PTO, bonus, equity…)."""
+    return [sec for sec in sections
+            if sec.text.strip() and BENEFITS_HEADINGS.search(sec.heading)]
 
 
 def find_skills(text: str, extra_skills: tuple[str, ...] = ()) -> list[str]:

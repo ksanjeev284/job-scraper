@@ -11,6 +11,7 @@ Planned improvements, in rough priority order.
 - [x] LinkedIn guest job-search API (no login)
 
 ## Extraction
+- [x] Structured benefits extraction (health, PTO, bonus, equity)
 - [x] Posting-age parsing for relative dates ("2 days ago", "3 weeks ago")
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [ ] Fixture-based regression tests (live posting, closed ATS API posting, SPA shell with embedded JSON, block page, duplicates, malformed responses)
@@ -19,9 +20,9 @@ Planned improvements, in rough priority order.
 - [ ] Posting-age parsing for relative dates ("2 days ago", "Posted 3 weeks ago")
 
 ## Scoring
-- [ ] Profile schema validation with helpful errors
-- [ ] Configurable score weights
-- [ ] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
+- [x] Profile schema validation with helpful errors
+- [x] Configurable score weights
+- [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 
 ## Robustness
 - [ ] Optional proxy rotation support

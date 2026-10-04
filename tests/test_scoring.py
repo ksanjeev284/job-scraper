@@ -142,3 +142,44 @@ def test_template_profile_scores_neutrally():
     assert match.breakdown["role_relevance"] == 2  # no tiers configured
     assert match.breakdown["location"] == 3  # no locations configured
     assert 0 <= match.total <= 100
+
+
+def test_validate_profile_accepts_good():
+    from jobscraper.scoring import validate_profile
+    assert validate_profile({
+        "skills": ["Python"], "years_total": 3, "locations": ["Remote"],
+        "role_tiers": {"tier1": ["backend"]},
+        "skill_aliases": {"X": ["Y"]},
+        "weights": {"technical_skills": 40},
+        "mystery_future_key": 1,
+    }) == []
+
+
+def test_validate_profile_rejects_bad():
+    from jobscraper.scoring import validate_profile
+    errors = validate_profile({
+        "skills": "Python", "years_total": -1,
+        "role_tiers": {"tier1": "backend"},
+        "weights": {"nonsense": 5, "experience": -2},
+    })
+    assert len(errors) == 5
+
+
+def test_custom_weights_rescale_breakdown(tmp_path):
+    data = {"skills": ["Python"], "years_total": 5, "locations": [],
+            "weights": {"technical_skills": 70, "experience": 0,
+                        "seniority": 0, "certifications": 0, "location": 0,
+                        "role_relevance": 0, "compensation": 0}}
+    path = tmp_path / "profile.json"
+    path.write_text(__import__("json").dumps(data))
+    profile = load_profile(str(path))
+    post = _posting(title="Python Engineer")
+    post.skills_found = ["Python", "Go", "SQL", "Git", "Linux",
+                            "Docker", "AWS"]
+    profile["skills"] = ["Python", "Go", "SQL", "Git", "Linux",
+                         "Docker", "AWS"]
+    post.location = ""
+    match = score_posting(post, profile)
+    assert match.breakdown["technical_skills"] == 70
+    assert match.breakdown["experience"] == 0
+    assert match.total == sum(match.breakdown.values())

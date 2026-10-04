@@ -22,7 +22,7 @@ import uuid
 
 from jobscraper.boards import DISCOVERERS
 from jobscraper.pipeline import run_pipeline
-from jobscraper.scoring import load_profile
+from jobscraper.scoring import load_profile, validate_profile
 from jobscraper.sources.linkedin import search_jobs
 
 try:
@@ -137,6 +137,12 @@ def _run_job(job_id: str, urls: list[str], req: ScrapeRequest) -> None:
 
 @app.post("/api/scrape")
 def start_scrape(req: ScrapeRequest):
+    if req.profile is not None:
+        problems = validate_profile(req.profile)
+        if problems:
+            raise HTTPException(status_code=400,
+                                detail="invalid profile: "
+                                       + "; ".join(problems))
     urls = _resolve_urls(req)
     job_id = uuid.uuid4().hex[:12]
     with _JOBS_LOCK:

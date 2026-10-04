@@ -21,6 +21,7 @@ class MatchResult:
     breakdown: dict[str, int] = field(default_factory=dict)
     matched_skills: list[str] = field(default_factory=list)
     skill_gaps: list[str] = field(default_factory=list)
+    weights: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -50,6 +51,7 @@ class Posting:
     requirements: list[Section] = field(default_factory=list)
     nice_to_have: list[Section] = field(default_factory=list)
     responsibilities: list[Section] = field(default_factory=list)
+    benefits: list[Section] = field(default_factory=list)
     other_possibly_relevant: list[Section] = field(default_factory=list)
     sections: list[Section] = field(default_factory=list)
     full_text_chars: int = 0
@@ -61,7 +63,7 @@ class Posting:
         """Serialize to plain dicts for JSON output."""
         d = self.__dict__.copy()
         for key in ("requirements", "nice_to_have", "responsibilities",
-                    "other_possibly_relevant", "sections"):
+                    "benefits", "other_possibly_relevant", "sections"):
             d[key] = [s.__dict__ for s in d[key]]
         if d["match"] is not None:
             d["match"] = d["match"].__dict__

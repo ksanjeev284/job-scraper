@@ -19,6 +19,7 @@ from jobscraper.extract import (
     MIN_CONTENT_CHARS,
     check_liveness,
     detect_signals,
+    extract_benefits,
     extract_requirements,
     extract_salary,
     find_experience,
@@ -278,6 +279,7 @@ def process_url(url: str, use_cache: bool = True,
     post.requirements = req
     post.nice_to_have = nice
     post.responsibilities = resp
+    post.benefits = extract_benefits(sections)
     post.other_possibly_relevant = maybe[:3]
     post.sections = [Section(s.heading, s.text[:2000]) for s in sections]
     post.full_text_chars = len(full_text)
