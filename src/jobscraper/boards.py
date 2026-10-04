@@ -552,6 +552,31 @@ def fetch_eightfold(url: str) -> dict | None:
     return meta
 
 
+# Radancy (TalentBrew) job pages live on tenant-branded domains, e.g.
+# https://careers.munichre.com/en/job/hartford/data-product-owner/3342/45469410752
+_RADANCY_JOB_URL = re.compile(
+    r"^https?://[^/]+/[a-z]{2}/job/(?:[^/]+/)?[^/]+/\d+/\d+/?$")
+
+
+def fetch_radancy(url: str) -> dict | None:
+    """Radancy (TalentBrew) career sites: server-rendered job pages.
+
+    Matches e.g. https://careers.munichre.com/en/job/hartford/data-product-owner/3342/45469410752
+    (and the location-less /job/<slug>/<category>/<id> variant).
+    Posting pages carry schema.org JobPosting JSON-LD, so plain HTTP
+    suffices with no browser and no auth.
+    """
+    if not _RADANCY_JOB_URL.match(url):
+        return None
+    html_text = http_get(url, max_retries=2).text
+    meta = parse_json_ld(BeautifulSoup(html_text, "html.parser"))
+    if not meta:
+        raise ValueError("radancy: no JobPosting structured data on page")
+    meta["source"] = "radancy-page"
+    meta["position_url"] = url
+    return meta
+
+
 # ---------------------------------------------------------------------------
 # Discovery: enumerate every open posting on a company's career portal.
 # Each discoverer takes a board-specific identifier and returns posting URLs.
@@ -756,6 +781,55 @@ def discover_join(slug: str) -> list[str]:
     return urls
 
 
+# Cap discovery walks so a very large Radancy board cannot keep the run
+# paging for hours.
+RADANCY_MAX_PAGES = 100
+
+
+def discover_radancy(spec: str) -> list[str]:
+    """Enumerate every open posting on a Radancy (TalentBrew) career site.
+
+    ``spec`` is ``host[:lang]`` (e.g. ``careers.munichre.com`` or
+    ``careers.munichre.com:de``; language defaults to ``en``). Reads the
+    server-rendered ``/{lang}/search-jobs?p=N`` result pages (no auth),
+    collecting the canonical job URLs. Stops at the first page with no
+    new job links; walks at most ``RADANCY_MAX_PAGES`` pages.
+    """
+    parts = spec.split(":")
+    if len(parts) > 2 or not parts[0].strip():
+        raise ValueError(
+            "radancy discover spec must be 'host[:lang]', e.g. "
+            f"'radancy:careers.munichre.com:en' (got {spec!r})")
+    host = parts[0].strip().lower()
+    lang = parts[1].strip().lower() if len(parts) == 2 else "en"
+    if not re.fullmatch(r"[a-z]{2}", lang):
+        raise ValueError(
+            f"radancy discover language must be a 2-letter code "
+            f"(got {lang!r})")
+    urls: list[str] = []
+    seen: set[str] = set()
+    page = 1
+    while page <= RADANCY_MAX_PAGES:
+        polite_wait(f"https://{host}/{lang}/search-jobs", base=0.5)
+        page_html = http_get(
+            f"https://{host}/{lang}/search-jobs?p={page}",
+            max_retries=2).text
+        soup = BeautifulSoup(page_html, "html.parser")
+        new = 0
+        for anchor in soup.select("a.search-results-list__job-link[href]"):
+            href = anchor["href"]
+            if href.startswith("/"):
+                href = f"https://{host}{href}"
+            if href not in seen:
+                seen.add(href)
+                urls.append(href)
+                new += 1
+        if new == 0:
+            break
+        page += 1
+    return urls
+
+
 DISCOVERERS: dict[str, object] = {
     "lever": discover_lever,
     "ashby": discover_ashby,
@@ -771,6 +845,7 @@ DISCOVERERS: dict[str, object] = {
     "rippling": discover_rippling,
     "eightfold": discover_eightfold,
     "join": discover_join,
+    "radancy": discover_radancy,
 }
 
 
@@ -789,6 +864,7 @@ BOARD_FETCHERS: list[Fetcher] = [
     fetch_pinpoint,
     fetch_eightfold,
     fetch_join,
+    fetch_radancy,
     fetch_linkedin,
 ]
 
@@ -831,4 +907,9 @@ def board_name_for_url(url: str) -> str:
     for fragment, name in BOARD_HOSTS:
         if fragment in host:
             return name
+    # Radancy (TalentBrew) boards live on tenant-branded domains, so the
+    # host gives nothing away; the /{lang}/job/.../<category>/<id> path
+    # shape is distinctive enough to attribute on its own.
+    if _RADANCY_JOB_URL.match(url):
+        return "radancy"
     return "generic"
