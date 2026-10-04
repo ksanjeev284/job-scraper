@@ -12,11 +12,14 @@ from jobscraper.models import MatchResult, Posting
 from jobscraper.notify import (
     build_payload,
     build_pushover_payload,
+    build_telegram_payload,
     deliver,
     host_of,
     pushover_credentials,
     send_pushover,
+    send_telegram,
     send_webhook,
+    telegram_credentials,
     webhook_urls_from_env,
 )
 
@@ -298,6 +301,135 @@ def test_send_pushover_server_error_returns_false(monkeypatch):
         assert "HTTP 400" in detail
     finally:
         _Capture.status = 200
+
+
+# --- Telegram bot-message channel -------------------------------------------
+
+class _TelegramCapture(BaseHTTPRequestHandler):
+    received: list[bytes] = []
+    ok: bool = True
+    description: str = "chat not found"
+
+    def do_POST(self):  # noqa: N802
+        length = int(self.headers.get("Content-Length", "0"))
+        _TelegramCapture.received.append(self.rfile.read(length))
+        body = (b'{"ok": true, "result": {}}' if _TelegramCapture.ok
+                else json.dumps({"ok": False, "description":
+                                 _TelegramCapture.description}).encode())
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):  # noqa: ANN002, ANN202
+        pass
+
+
+def _serve_telegram() -> tuple[HTTPServer, threading.Thread]:
+    server = HTTPServer(("127.0.0.1", 0), _TelegramCapture)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
+
+
+def _telegram_posts() -> list[Posting]:
+    return [_posting("analyst", 80, is_new=True), _posting("dev", 40)]
+
+
+def test_telegram_payload_fields_and_ranking():
+    payload = build_telegram_payload(_telegram_posts(), chat_id="12345")
+    assert payload is not None
+    assert payload["chat_id"] == "12345"
+    assert payload["disable_web_page_preview"] is True
+    text = payload["text"]
+    # ranked: analyst (80) before dev (40); URLs are inline as plain text
+    assert text.splitlines()[1].startswith("analyst -")
+    assert "[NEW]" in text
+    assert "https://example.com/jobs/analyst" in text
+    assert "https://example.com/jobs/dev" in text
+    assert "1 new" in text.splitlines()[0]
+
+
+def test_telegram_only_new_filters():
+    posts = [_posting("old", 90), _posting("fresh", 50, is_new=True)]
+    payload = build_telegram_payload(posts, chat_id="1", only_new=True)
+    assert payload is not None
+    assert "fresh -" in payload["text"]
+    assert "old -" not in payload["text"]
+
+
+def test_telegram_only_new_nothing_new_returns_none():
+    assert (build_telegram_payload([_posting("old", 90)], chat_id="1",
+                                    only_new=True) is None)
+
+
+def test_telegram_message_capped_at_limit():
+    posts = [_posting(f"job{i} with a fairly long descriptive title", i)
+             for i in range(200)]
+    payload = build_telegram_payload(posts, chat_id="1")
+    assert payload is not None
+    assert len(payload["text"]) <= 4096
+
+
+def test_telegram_credentials_from_env(monkeypatch):
+    monkeypatch.setenv("JOBSCRAPER_TELEGRAM_TOKEN", "tok123")
+    monkeypatch.setenv("JOBSCRAPER_TELEGRAM_CHAT_ID", "987654")
+    assert telegram_credentials() == ("tok123", "987654")
+    # explicit args win over the environment
+    assert telegram_credentials(token="x", chat_id="y") == ("x", "y")
+
+
+def test_telegram_credentials_missing_raises(monkeypatch):
+    monkeypatch.delenv("JOBSCRAPER_TELEGRAM_TOKEN", raising=False)
+    monkeypatch.delenv("JOBSCRAPER_TELEGRAM_CHAT_ID", raising=False)
+    with pytest.raises(ValueError, match="JOBSCRAPER_TELEGRAM_TOKEN"):
+        telegram_credentials()
+    with pytest.raises(ValueError):
+        send_telegram(_telegram_posts())
+
+
+def test_send_telegram_posts_json_and_checks_ok_body(monkeypatch):
+    _TelegramCapture.received.clear()
+    server, thread = _serve_telegram()
+    try:
+        monkeypatch.setattr(
+            "jobscraper.notify._TELEGRAM_ENDPOINT_TEMPLATE",
+            f"http://127.0.0.1:{server.server_port}/bot{{token}}/"
+            "sendMessage")
+        ok, detail = send_telegram(_telegram_posts(), token="tok",
+                                   chat_id="12345")
+        assert ok, detail
+        assert "127.0.0.1" in detail
+        assert "tok" not in detail and "12345" not in detail
+        assert len(_TelegramCapture.received) == 1
+        payload = json.loads(_TelegramCapture.received[0].decode())
+        assert payload["chat_id"] == "12345"
+        assert "analyst" in payload["text"]
+        assert payload["disable_web_page_preview"] is True
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_send_telegram_api_false_ok_reports_description(monkeypatch):
+    _TelegramCapture.ok = False
+    _TelegramCapture.received.clear()
+    server, thread = _serve_telegram()
+    try:
+        monkeypatch.setattr(
+            "jobscraper.notify._TELEGRAM_ENDPOINT_TEMPLATE",
+            f"http://127.0.0.1:{server.server_port}/bot{{token}}/"
+            "sendMessage")
+        ok, detail = send_telegram(_telegram_posts(), token="tok",
+                                   chat_id="12345")
+        assert not ok
+        assert "chat not found" in detail
+        assert "tok" not in detail  # token stays out of error strings
+    finally:
+        _TelegramCapture.ok = True
+        server.shutdown()
+        thread.join()
         server.shutdown()
         thread.join()
 

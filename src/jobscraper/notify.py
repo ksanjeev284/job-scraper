@@ -16,6 +16,14 @@ more user-supplied webhook URLs. Three payload modes are supported:
   form-encoded, not JSON, and is sent to the fixed Pushover endpoint,
   so ``--webhook-url`` is ignored in this mode. One message per run,
   linking to the top posting.
+- ``telegram`` — a message via the Telegram Bot API
+  (https://core.telegram.org/bots/api). Auth uses the bot token and
+  chat id from ``JOBSCRAPER_TELEGRAM_TOKEN`` /
+  ``JOBSCRAPER_TELEGRAM_CHAT_ID`` (or ``--telegram-token`` /
+  ``--telegram-chat-id``); the payload is JSON and is sent to the fixed
+  Bot API ``sendMessage`` endpoint, so ``--webhook-url`` is ignored in
+  this mode. One message per run listing the ranked postings with their
+  URLs (plain text, no formatting, so no Markdown escaping edge cases).
 
 Webhook URLs often carry secrets in their path, so they are never printed
 or logged in full: only the host is shown. Delivery failures are reported
@@ -34,7 +42,7 @@ from urllib.parse import urlencode, urlsplit
 
 from jobscraper.models import Posting
 
-WebhookMode = Literal["plain", "slack", "discord", "pushover"]
+WebhookMode = Literal["plain", "slack", "discord", "pushover", "telegram"]
 
 _TIMEOUT_SECONDS = 15
 _MAX_SLACK_BLOCKS = 50
@@ -46,6 +54,14 @@ _PUSHOVER_USER_ENV = "JOBSCRAPER_PUSHOVER_USER"
 # Pushover truncates messages over 1024 characters server-side; cap the
 # body here so what is sent is what the user sees.
 _MAX_PUSHOVER_MESSAGE = 1024
+
+# The bot token is part of the URL path (Bot API convention), so the
+# endpoint template keeps it out of the public constant; only the host
+# ever appears in logs. The Bot API rejects messages over 4096 chars.
+_TELEGRAM_ENDPOINT_TEMPLATE = "https://api.telegram.org/bot{token}/sendMessage"
+_TELEGRAM_TOKEN_ENV = "JOBSCRAPER_TELEGRAM_TOKEN"
+_TELEGRAM_CHAT_ID_ENV = "JOBSCRAPER_TELEGRAM_CHAT_ID"
+_MAX_TELEGRAM_MESSAGE = 4096
 
 
 def host_of(url: str) -> str:
@@ -265,6 +281,117 @@ def send_pushover(posts: list[Posting], *, token: str | None = None,
     return _post(_PUSHOVER_ENDPOINT,
                  urlencode(fields).encode("utf-8"),
                  "application/x-www-form-urlencoded")
+
+
+# --- Telegram bot-message channel -------------------------------------------
+
+def telegram_credentials(token: str | None = None,
+                         chat_id: str | None = None) -> tuple[str, str]:
+    """Resolve the Telegram bot token and chat id.
+
+    Explicit arguments win; each falls back to its environment variable
+    (``JOBSCRAPER_TELEGRAM_TOKEN`` / ``JOBSCRAPER_TELEGRAM_CHAT_ID``).
+    Raises ``ValueError`` naming the missing source when either is
+    absent. Values are never logged or echoed.
+    """
+    token = token or os.environ.get(_TELEGRAM_TOKEN_ENV, "").strip()
+    chat_id = chat_id or os.environ.get(_TELEGRAM_CHAT_ID_ENV, "").strip()
+    missing = []
+    if not token:
+        missing.append(f"{_TELEGRAM_TOKEN_ENV} (or --telegram-token)")
+    if not chat_id:
+        missing.append(f"{_TELEGRAM_CHAT_ID_ENV} (or --telegram-chat-id)")
+    if missing:
+        raise ValueError(
+            "telegram mode needs credentials: missing "
+            + ", ".join(missing))
+    return token, chat_id
+
+
+def build_telegram_payload(posts: list[Posting], *, chat_id: str,
+                           only_new: bool = False,
+                           top: int = 25) -> dict | None:
+    """Build the Telegram Bot API ``sendMessage`` fields.
+
+    One message per run (not one per posting) so watch-mode users get a
+    single alert. Each line is ``Title - company - location - score
+    [NEW]`` followed by the posting URL, sent as plain text to avoid
+    Markdown escaping edge cases; web-page previews are disabled.
+    Returns ``None`` when ``only_new`` is set and nothing is new.
+    """
+    ranked = _ranked(posts)
+    new_posts = [p for p in ranked if p.is_new]
+    selected = (new_posts if only_new else ranked)[:top]
+    if only_new and not new_posts:
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    summary = (f"{len(new_posts)} new" if new_posts
+               else f"{len(ranked)} ranked")
+    lines = [f"Job scrape - {summary} ({stamp})"]
+    for post in selected:
+        title, company, location, score = _display(post)
+        marker = " [NEW]" if post.is_new else ""
+        lines.append(f"{title} - {company} - {location} - "
+                     f"score {score}{marker}")
+        lines.append(post.url)
+    text = "\n".join(lines)[:_MAX_TELEGRAM_MESSAGE]
+    return {
+        "chat_id": chat_id,
+        "text": text or "(no postings)",
+        "disable_web_page_preview": True,
+    }
+
+
+def _post_telegram(url: str, payload: dict) -> tuple[bool, str]:
+    """POST JSON to a Telegram Bot API endpoint.
+
+    Unlike generic webhooks, the Bot API returns HTTP 200 with an
+    ``{"ok": false, ...}`` body for most API-level failures (bad chat
+    id, revoked token, ...), so the response body is checked too.
+    ``detail`` carries only the host and the API description, never the
+    URL (which embeds the bot token) or the message body.
+    """
+    host = host_of(url)
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=body, method="POST",
+        headers={"Content-Type": "application/json",
+                 "User-Agent": "job-scraper/1.0"})
+    try:
+        with urllib.request.urlopen(request,
+                                    timeout=_TIMEOUT_SECONDS) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return False, f"{host}: HTTP {exc.code}"
+    except OSError as exc:
+        return False, f"{host}: {exc.__class__.__name__}: {exc}"
+    try:
+        data = json.loads(raw) if raw else {}
+    except ValueError:
+        data = {}
+    if data.get("ok") is True:
+        return True, f"{host}: delivered ({len(body)} bytes)"
+    description = data.get("description") or "unknown error"
+    return False, f"{host}: Bot API error: {description}"
+
+
+def send_telegram(posts: list[Posting], *, token: str | None = None,
+                  chat_id: str | None = None, only_new: bool = False,
+                  top: int = 25) -> tuple[bool | None, str]:
+    """Send one Telegram bot message for a set of postings.
+
+    Returns ``(ok, detail)``; ``ok`` is ``None`` when ``only_new`` is set
+    and nothing is new. Raises ``ValueError`` when the Telegram
+    credentials are missing. The bot token and chat id never appear in
+    results, logs, or error strings.
+    """
+    resolved_token, resolved_chat_id = telegram_credentials(token, chat_id)
+    fields = build_telegram_payload(posts, chat_id=resolved_chat_id,
+                                    only_new=only_new, top=top)
+    if fields is None:
+        return None, "skipped: no new postings"
+    return _post_telegram(
+        _TELEGRAM_ENDPOINT_TEMPLATE.format(token=resolved_token), fields)
 
 
 def deliver(posts: list[Posting], urls: list[str], *,

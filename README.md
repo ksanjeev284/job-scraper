@@ -23,7 +23,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **URL canonicalization** — tracking parameters (`utm_*`, `trk`, `gclid`, …), fragments, host-case variants and trailing slashes are stripped before fetching, so the same posting shared from different sources is fetched once and reported under one clean URL; the applied-tracker check matches across those variants too
 - **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML and Excel outputs
 - **Excel export** — `--excel results.xlsx` writes the ranked spreadsheet: score-colored cells, frozen header with autofilter, clickable posting URLs, formula-injection neutralized (needs `pip install -e ".[excel]"`)
-- **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` sends a phone-push alert instead (see below)
+- **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` / `--webhook-mode telegram` send a phone alert instead (see below)
 
 ## Web GUI
 
@@ -180,6 +180,11 @@ jobscraper --urls urls.txt --watch state.json --webhook-only-new \
 jobscraper --urls urls.txt --watch state.json --webhook-only-new \
   --webhook-mode pushover
 
+# Telegram alert via your own bot (needs a bot token and chat id;
+# --webhook-url is ignored in this mode)
+jobscraper --urls urls.txt --watch state.json --webhook-only-new \
+  --webhook-mode telegram
+
 # Watch mode also tracks closures: postings seen in a previous run that
 # disappear are reported as "closed since last run" (fetch errors are
 # never treated as closures; a posting that reappears is reopened).
@@ -197,6 +202,17 @@ jobscraper --urls urls.txt --watch state.json
   user key from `JOBSCRAPER_PUSHOVER_TOKEN` / `JOBSCRAPER_PUSHOVER_USER`
   (or `--pushover-token` / `--pushover-user`); `--webhook-url` is
   ignored in this mode. Credentials are never logged.
+- `--webhook-mode telegram` sends one message per run via the Telegram
+  Bot API (https://core.telegram.org/bots/api): ranked postings as
+  plain-text lines with their URLs (web-page previews disabled),
+  capped at the 4096-character API limit. It needs a bot token and the
+  chat id from `JOBSCRAPER_TELEGRAM_TOKEN` /
+  `JOBSCRAPER_TELEGRAM_CHAT_ID` (or `--telegram-token` /
+  `--telegram-chat-id`); `--webhook-url` is ignored in this mode.
+  Setup: create a bot with @BotFather to get the token, then message
+  the bot from your account and read your chat id from
+  `https://api.telegram.org/bot<TOKEN>/getUpdates`. Credentials are
+  never logged.
 - `--webhook-only-new` skips the POST entirely when watch mode finds nothing
   new. `--webhook-top N` caps the postings included (default 25).
 - Webhook URLs carry secrets in their path: only the host is ever logged.

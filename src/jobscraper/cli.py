@@ -118,16 +118,24 @@ def build_parser() -> argparse.ArgumentParser:
                              "webhook URL (repeatable); see README for "
                              "Slack/Discord/Google Sheets/Notion recipes")
     parser.add_argument("--webhook-mode", default="plain",
-                        choices=["plain", "slack", "discord", "pushover"],
+                        choices=["plain", "slack", "discord", "pushover",
+                                 "telegram"],
                         help="Webhook payload format (default plain; "
                              "slack/discord send a chat notification; "
-                             "pushover sends a phone-push alert)")
+                             "pushover/telegram send an alert via the "
+                             "Pushover API or a Telegram bot)")
     parser.add_argument("--pushover-token", default=None, metavar="TOKEN",
                         help="Pushover application token for --webhook-mode "
                              "pushover (or JOBSCRAPER_PUSHOVER_TOKEN)")
     parser.add_argument("--pushover-user", default=None, metavar="KEY",
                         help="Pushover user key for --webhook-mode pushover "
                              "(or JOBSCRAPER_PUSHOVER_USER)")
+    parser.add_argument("--telegram-token", default=None, metavar="TOKEN",
+                        help="Telegram bot token for --webhook-mode "
+                             "telegram (or JOBSCRAPER_TELEGRAM_TOKEN)")
+    parser.add_argument("--telegram-chat-id", default=None, metavar="ID",
+                        help="Telegram chat id for --webhook-mode telegram "
+                             "(or JOBSCRAPER_TELEGRAM_CHAT_ID)")
     parser.add_argument("--webhook-only-new", action="store_true",
                         help="With --watch, only notify about postings "
                              "flagged new since the last run "
@@ -322,26 +330,39 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"XLSX: {args.excel}")
 
-    from jobscraper.notify import deliver, send_pushover, webhook_urls_from_env
-    if args.webhook_mode == "pushover":
-        # Phone-push channel: posts to the fixed Pushover endpoint;
-        # --webhook-url is ignored in this mode.
+    from jobscraper.notify import (
+        deliver,
+        send_pushover,
+        send_telegram,
+        webhook_urls_from_env,
+    )
+    if args.webhook_mode in ("pushover", "telegram"):
+        # Direct-notification channels: post to the fixed service endpoint;
+        # --webhook-url is ignored in these modes.
+        if args.webhook_mode == "pushover":
+            sender, name = send_pushover, "Pushover"
+            creds = {"token": args.pushover_token,
+                     "user": args.pushover_user}
+        else:
+            sender, name = send_telegram, "Telegram"
+            creds = {"token": args.telegram_token,
+                     "chat_id": args.telegram_chat_id}
         try:
-            ok, detail = send_pushover(
-                results, token=args.pushover_token, user=args.pushover_user,
-                only_new=args.webhook_only_new, top=args.webhook_top)
+            ok, detail = sender(
+                results, only_new=args.webhook_only_new,
+                top=args.webhook_top, **creds)
         except ValueError as exc:
-            print(f"Pushover: {exc}", file=sys.stderr)
+            print(f"{name}: {exc}", file=sys.stderr)
             return 1
         if ok is None:
-            print(f"Pushover: skipped ({detail})")
+            print(f"{name}: skipped ({detail})")
         elif ok:
-            print(f"Pushover: {detail}")
+            print(f"{name}: {detail}")
         else:
-            print(f"Pushover FAILED: {detail}", file=sys.stderr)
+            print(f"{name} FAILED: {detail}", file=sys.stderr)
             return 1
     webhook_urls = list(args.webhook_url) + webhook_urls_from_env()
-    if webhook_urls and args.webhook_mode != "pushover":
+    if webhook_urls and args.webhook_mode not in ("pushover", "telegram"):
         seen, deduped = set(), []
         for url in webhook_urls:
             if url not in seen:
