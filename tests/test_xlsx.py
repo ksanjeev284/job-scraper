@@ -56,8 +56,11 @@ def test_xlsx_columns_match_csv_contract(tmp_path):
 
 
 def test_xlsx_url_is_clickable_and_score_colored(tmp_path):
+    from jobscraper.reporting import _spreadsheet_headers
+
     ws = _render([_post("Role", 90), _post("Other", 20)], tmp_path)
-    url_cell = ws.cell(row=2, column=18)
+    url_col = _spreadsheet_headers().index("url") + 1
+    url_cell = ws.cell(row=2, column=url_col)
     assert url_cell.hyperlink is not None
     assert url_cell.hyperlink.target.startswith("https://example.com")
     score_cell = ws.cell(row=2, column=1)

@@ -19,6 +19,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Liveness verdicts** — classifies each posting as LIVE / CLOSED / unknown with a reason; closed postings are detected from page text *and* board-API 404s
 - **Structured extraction** — splits descriptions into headed sections, buckets them into requirements / responsibilities / nice-to-haves, and detects skills, experience years, salary figures, sponsorship mentions, language requirements and work mode; section headings are recognized in English, German, French, Spanish, Dutch and Italian
 - **0-100 match scoring** — against a candidate profile JSON: technical skills (35), experience (25), seniority (15), certifications (10), location (5), role relevance (5), compensation (5); includes skill gaps and a fit/watch summary
+- **Seniority inference** — every posting gets an explicit level (`intern` / `entry` / `mid` / `senior` / `staff` / `lead` / `manager` / `director` / `executive` / `unknown`) with match evidence, from title markers first, then description signals, then required-experience bands; `--seniority senior,staff` filters runs by level, and the level shows in CSV/Excel/HTML exports
 - **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; skips URLs already marked applied in your tracker file
 - **URL canonicalization** — tracking parameters (`utm_*`, `trk`, `gclid`, …), fragments, host-case variants and trailing slashes are stripped before fetching, so the same posting shared from different sources is fetched once and reported under one clean URL; the applied-tracker check matches across those variants too
 - **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML and Excel outputs
@@ -103,6 +104,7 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--location-filter TEXT` | keep only postings whose location contains TEXT |
 | `--keyword-filter "A,B"` | keep only postings whose title contains a keyword |
 | `--min-score N` | keep only postings scoring N or higher (0-100) |
+| `--seniority LEVEL[,LEVEL]` | keep only postings at these seniority levels: `intern`, `entry`, `mid`, `senior`, `staff`, `lead`, `manager`, `director`, `executive`, `unknown` |
 | `--out PATH` | JSON output path |
 | `--md PATH` | Markdown report path |
 | `--csv PATH` | CSV export path |

@@ -37,6 +37,8 @@ class Posting:
     department: str | None = None
     posted: str | None = None
     age_days: int | None = None
+    seniority: str | None = None
+    seniority_evidence: list[str] = field(default_factory=list)
     via: str | None = None
     fetch_method: str | None = None
     is_live: bool | None = None

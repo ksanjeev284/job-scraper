@@ -35,6 +35,8 @@ from jobscraper.http import configure_robots, robots_from_env
 from jobscraper.models import Posting, Section
 from jobscraper.rendering import fetch_playwright, fetch_requests
 from jobscraper.scoring import posting_age_days, score_posting
+from jobscraper.seniority import LEVELS as SENIORITY_LEVELS
+from jobscraper.seniority import infer_seniority
 from jobscraper.urls import canonicalize_url, input_dedupe
 
 
@@ -105,6 +107,7 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  exclude_companies: str | None = None,
                  exclude_keywords: str | None = None,
                  min_score: int | None = None,
+                 seniority: str | None = None,
                  watch_path: str | None = None,
                  respect_robots: bool = False,
                  progress_cb=None) -> tuple[list[Posting], int]:
@@ -150,7 +153,8 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     if not no_dedupe:
         results = dedupe_results(results)
     results = apply_filters(results, location_filter, keyword_filter,
-                            exclude_companies, exclude_keywords)
+                            exclude_companies, exclude_keywords,
+                            seniority_filter=seniority)
     if min_score is not None:
         results = [p for p in results
                    if p.error or (p.match and p.match.total >= min_score)]
@@ -168,22 +172,34 @@ def apply_filters(posts: list[Posting],
                   location_filter: str | None = None,
                   keyword_filter: str | None = None,
                   exclude_companies: str | None = None,
-                  exclude_keywords: str | None = None) -> list[Posting]:
+                  exclude_keywords: str | None = None,
+                  seniority_filter: str | None = None) -> list[Posting]:
     """Keep/drop postings by location, title keywords and exclusions.
 
     ``keyword_filter`` keeps titles containing any comma-separated keyword;
     ``exclude_companies``/``exclude_keywords`` drop matching companies/titles
-    (all case-insensitive). Errored postings are always kept so failures
-    stay visible.
+    (all case-insensitive); ``seniority_filter`` keeps only postings whose
+    inferred seniority level is in the comma-separated list (postings with
+    an unknown level are dropped unless ``unknown`` is listed). Errored
+    postings are always kept so failures stay visible.
     """
     keywords = _split_csv(keyword_filter)
     loc_filter = (location_filter or "").lower()
     ex_companies = _split_csv(exclude_companies)
     ex_keywords = _split_csv(exclude_keywords)
+    seniority_levels = set(_split_csv(seniority_filter))
+    unknown_levels = {lvl for lvl in seniority_levels
+                      if lvl not in SENIORITY_LEVELS}
+    if unknown_levels:
+        raise ValueError(
+            f"unknown seniority level(s): {sorted(unknown_levels)} "
+            f"(valid: {', '.join(SENIORITY_LEVELS)})")
 
     def keep(post: Posting) -> bool:
         if post.error:
             return True
+        if seniority_levels and post.seniority not in seniority_levels:
+            return False
         if loc_filter and loc_filter not in (post.location or "").lower():
             return False
         title = (post.title or "").lower()
@@ -375,6 +391,10 @@ def process_url(url: str, use_cache: bool = True,
                           ) if profile else ()
     post.skills_found = find_skills(full_text, custom_skills)
     post.experience_years_mentioned = find_experience(full_text)
+    seniority = infer_seniority(post.title, full_text,
+                               post.experience_years_mentioned)
+    post.seniority = seniority.level
+    post.seniority_evidence = seniority.evidence
     post.salary_hits = extract_salary(full_text)
     post.salary_normalized = normalize_salary(post.salary_hits)
     for extra in meta.get("salary_hits_extra") or []:

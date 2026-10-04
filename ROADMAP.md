@@ -27,6 +27,7 @@ Planned improvements, in rough priority order.
 - [x] Profile schema validation with helpful errors
 - [x] Configurable score weights
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
+- [x] Structured seniority inference (`src/jobscraper/seniority.py`): explicit level ladder (intern/entry/mid/senior/staff/lead/manager/director/executive/unknown) with match evidence and confidence, from title markers, description signals, and required-experience bands; `--seniority` filter; level column in CSV/Excel/HTML exports
 
 ## Robustness
 - [x] Optional proxy rotation support (`--proxy`, `--proxies-file`, `JOBSCRAPER_PROXIES`; round-robin with failure parking)

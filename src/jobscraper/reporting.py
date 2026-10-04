@@ -126,9 +126,9 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
 def _spreadsheet_headers() -> list[str]:
     """Column headers shared by the CSV and Excel exports."""
     return ["score", "live", "age_days", "title", "company", "location",
-            "type", "exp_years", "salary", "matched_skills", "skill_gaps",
-            "fit_summary", "benefits", "sponsorship", "german_required",
-            "work_mode", "tracker", "url"]
+            "type", "seniority", "exp_years", "salary", "matched_skills",
+            "skill_gaps", "fit_summary", "benefits", "sponsorship",
+            "german_required", "work_mode", "tracker", "url"]
 
 
 def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
@@ -144,6 +144,7 @@ def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
         post.company or "",
         post.location or "",
         post.employment_type or "",
+        post.seniority or "",
         ",".join(map(str, post.experience_years_mentioned)),
         "; ".join(post.salary_hits),
         "; ".join(match.matched_skills) if match else "",
@@ -322,7 +323,7 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
         parts.append("<h2>Ranked by match score</h2>")
         parts.append("<table class=\"rank\"><tr><th>Score</th><th>Live</th>"
                      "<th>Age</th><th>Title</th><th>Company</th>"
-                     "<th>Location</th><th>Gaps</th></tr>")
+                     "<th>Location</th><th>Level</th><th>Gaps</th></tr>")
         for idx, post in enumerate(ranked):
             match = post.match
             assert match is not None
@@ -337,6 +338,7 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
                 f"{match.total}</span></td><td>{live}</td><td>{age}</td>"
                 f"<td><a href=\"#p{idx}\">{_esc(post.title)}</a>{new}</td>"
                 f"<td>{_esc(post.company)}</td><td>{_esc(post.location)}</td>"
+                f"<td>{_esc(post.seniority or '?')}</td>"
                 f"<td>{gaps}</td></tr>")
         parts.append("</table>")
     else:
@@ -347,7 +349,8 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
         parts.append(f"<h2>{_esc(post.title)}</h2>")
         meta = [f"Company: {_esc(post.company)}",
                 f"Location: {_esc(post.location)}",
-                f"Type: {_esc(post.employment_type)}"]
+                f"Type: {_esc(post.employment_type)}",
+                f"Seniority: {_esc(post.seniority or 'unknown')}"]
         if post.age_days is not None:
             meta.append(f"Posted: {post.age_days} days ago")
         parts.append(f"<p class=\"meta\">{' · '.join(meta)}</p>")

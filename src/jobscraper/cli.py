@@ -101,6 +101,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Drop postings whose title contains these "
                              "keywords, e.g. "
                              '--exclude-keywords "intern,trainee"')
+    parser.add_argument("--seniority", default=None, metavar="LEVEL[,LEVEL]",
+                        help="Keep only postings at these seniority levels "
+                             "(comma-separated): intern, entry, mid, senior, "
+                             "staff, lead, manager, director, executive, "
+                             "unknown; e.g. --seniority senior,staff")
     parser.add_argument("--watch", default=None, metavar="STATE.json",
                         help="Watch mode: flag postings never seen before; "
                              "seen postings persist in STATE.json")
@@ -298,7 +303,8 @@ def main(argv: list[str] | None = None) -> int:
         keyword_filter=args.keyword_filter,
         exclude_companies=args.exclude_companies,
         exclude_keywords=args.exclude_keywords,
-        min_score=args.min_score, watch_path=args.watch,
+        min_score=args.min_score, seniority=args.seniority,
+        watch_path=args.watch,
         respect_robots=args.respect_robots,
         progress_cb=progress)
     after = sum(1 for p in results if not p.error)
