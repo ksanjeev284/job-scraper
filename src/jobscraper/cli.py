@@ -337,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{done}/{total}]", flush=True)
 
     before = len(urls)
-    results, new_count, closed = run_pipeline(
+    results, new_count, closed, stats = run_pipeline(
         urls, profile=profile, tracker_path=args.tracker,
         no_score=args.no_score, use_cache=not args.no_cache,
         workers=args.workers, no_dedupe=args.no_dedupe,
@@ -351,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
         watch_path=args.watch,
         respect_robots=args.respect_robots,
         browser_pool=args.browser_pool,
-        progress_cb=progress)
+        progress_cb=progress, run_stats=True)
     after = sum(1 for p in results if not p.error)
     if before - after:
         print(f"Filtered {before - after} posting(s) out")
@@ -446,6 +446,19 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     ok = sum(1 for p in results if not p.error)
     print(f"\nDone: {ok}/{len(results)} scraped OK")
+    if stats:
+        print("Sources:")
+        for stat in stats:
+            secs = stat.duration_ms / 1000.0
+            print(f"  {stat.name:<16}attempted={stat.attempted} "
+                  f"ok={stat.ok} errored={stat.errored} "
+                  f"filtered={stat.filtered} status={stat.status} "
+                  f"({secs:.1f}s)")
+            if stat.status in ("failed", "partial"):
+                top = sorted(stat.errors.items(),
+                             key=lambda kv: kv[1], reverse=True)[:2]
+                for msg, count in top:
+                    print(f"    - {msg} (x{count})")
     print(f"JSON: {out}\nMD:   {md}")
     for post in sorted(results,
                        key=lambda p: p.match.total if p.match else -1,

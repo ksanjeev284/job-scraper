@@ -25,6 +25,54 @@ class MatchResult:
 
 
 @dataclass
+class SourceStat:
+    """Per-source run diagnostics: how one board/source behaved this run.
+
+    Mirrors the "honest results" idea from leading scrapers (JobSpy,
+    ts-jobspy): a failing or blocked source shows up explicitly instead
+    of silently vanishing. ``status`` is one of:
+
+    - ``ok``: every attempted posting scraped cleanly
+    - ``partial``: some scraped, some errored
+    - ``failed``: none scraped cleanly
+    - ``empty``: nothing survived dedupe/filters
+    """
+
+    name: str
+    attempted: int = 0
+    ok: int = 0
+    errored: int = 0
+    duration_ms: float = 0.0
+    errors: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def filtered(self) -> int:
+        """Postings attempted but removed by dedupe/filters."""
+        return max(0, self.attempted - self.ok - self.errored)
+
+    @property
+    def status(self) -> str:
+        if self.errored and not self.ok:
+            return "failed"
+        if self.errored:
+            return "partial"
+        if not self.ok:
+            return "empty"
+        return "ok"
+
+    def record_error(self, message: str) -> None:
+        """Count one failed posting; keep a capped, truncated message."""
+        key = (message or "unknown error")[:120]
+        self.errors[key] = self.errors.get(key, 0) + 1
+
+    def to_dict(self) -> dict:
+        d = self.__dict__.copy()
+        d["filtered"] = self.filtered
+        d["status"] = self.status
+        return d
+
+
+@dataclass
 class Posting:
     """Everything extracted from one job posting URL."""
 

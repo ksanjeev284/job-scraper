@@ -27,6 +27,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **RSS feed export** — `--rss feed.xml` writes the ranked results as an RSS 2.0 feed for feed readers: match scores in item titles, fit summaries in the bodies, posting-age `pubDate`, watch-mode newcomers tagged `new`
 - **JSONL export** — `--jsonl results.jsonl` writes one full posting record per line, ranked best-first: streams through `jq` and `grep`, appends cleanly across runs (`>>`)
 - **SQLite export** — `--sqlite jobs.db` upserts the ranked results by canonical URL (no new dependencies): `first_seen` keeps the original timestamp, `last_seen` advances and `scrape_count` increments on every re-run, so the database becomes a queryable history across runs (`SELECT title, company, score FROM postings WHERE live = 1 ORDER BY score DESC`); list fields stored as JSON text, full record in `raw_json`
+- **Source run-summary** — every run prints a per-board table (attempted / ok / errored / filtered, plus a `ok` / `partial` / `failed` / `empty` status and the top error messages) so a blocked or broken board can never silently vanish; programmatic access via `run_pipeline(..., run_stats=True)`
 - **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` / `--webhook-mode telegram` send a phone alert instead (see below)
 
 ## Web GUI

@@ -39,6 +39,7 @@ Planned improvements, in rough priority order.
 - [x] Headless-browser pool (`src/jobscraper/rendering.py` `BrowserPool`): reuse one Chromium per worker thread across postings instead of launching per URL; fresh cookie/storage context per posting (closed afterwards), same anti-bot hardening, idle browsers evicted after 5 min, stats via `pool.stats()`; opt-in with `--browser-pool` / `JOBSCRAPER_BROWSER_POOL=1` (requires the `browser` extra); thread-safe for the pipeline's worker pool
 
 ## Reporting
+- [x] Source run-summary (`src/jobscraper/models.py` `SourceStat`, `boards.py` `board_name_for_url`, `run_pipeline(..., run_stats=True)`): every run reports per-source attempted/ok/errored/filtered with an `ok` / `partial` / `failed` / `empty` status and the top error messages (CLI "Sources" table), so a blocked or broken board can never silently vanish — JobSpy/ts-jobspy "honest results" style
 - [x] Web GUI service (FastAPI + browser UI, JSON/CSV export, Docker)
 - [x] HTML report option (self-contained, XSS-safe)
 - [x] Excel (.xlsx) export — ranked sheet, score bands, autofilter, clickable URLs, formula-injection neutralization (optional openpyxl extra)

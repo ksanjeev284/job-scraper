@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 
-from jobscraper.boards import BOARD_FETCHERS
+from jobscraper.boards import BOARD_FETCHERS, board_name_for_url
 from jobscraper.extract import (
     MIN_CONTENT_CHARS,
     check_liveness,
@@ -32,7 +32,7 @@ from jobscraper.extract import (
     split_sections,
 )
 from jobscraper.http import configure_robots, robots_from_env
-from jobscraper.models import Posting, Section
+from jobscraper.models import Posting, Section, SourceStat
 from jobscraper.rendering import (
     BrowserPool,
     browser_pool_from_env,
@@ -122,7 +122,8 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  watch_path: str | None = None,
                  respect_robots: bool = False,
                  browser_pool: bool = False,
-                 progress_cb=None) -> tuple[list[Posting], int]:
+                 progress_cb=None,
+                 run_stats: bool = False) -> tuple:
     """Scrape every URL and return (postings, new_count, closed).
 
     ``progress_cb(done, total)`` is called as each URL finishes, so web
@@ -136,7 +137,10 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     alive per worker thread for the whole run instead of launching a
     fresh browser per posting; requires the ``browser`` extra.
     ``max_age`` (days) keeps only postings posted within the last N days;
-    postings with an unknown age are kept.
+    postings with an unknown age are kept. ``run_stats`` also collects
+    per-source run diagnostics (a failing board can never silently
+    vanish) and appends them as a fourth return value: a list of
+    :class:`~jobscraper.models.SourceStat`.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -147,13 +151,18 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     # and reported under one clean URL.
     urls = [canonicalize_url(u) for u in input_dedupe(urls)]
 
+    durations: dict[str, float] = {}
+
     def work(url: str):
+        t0 = time.monotonic()
         try:
-            return process_url(url, use_cache=use_cache,
+            post = process_url(url, use_cache=use_cache,
                                profile=profile, tracker_path=tracker_path,
                                no_score=no_score)
         except Exception as exc:  # never let one URL kill the run
-            return Posting(url=url, error=str(exc)[:300])
+            post = Posting(url=url, error=str(exc)[:300])
+        durations[url] = time.monotonic() - t0
+        return post
 
     pool = BrowserPool() if (browser_pool or browser_pool_from_env()) else None
     try:
@@ -188,7 +197,34 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     new_count, closed = 0, []
     if watch_path:
         results, new_count, closed = apply_watch(results, watch_path)
+    if run_stats:
+        return results, new_count, closed, _collect_source_stats(
+            urls, results, durations)
     return results, new_count, closed
+
+
+def _collect_source_stats(urls: list[str], results: list[Posting],
+                          durations: dict[str, float]) -> list[SourceStat]:
+    """Build per-source diagnostics: attempted / ok / errored / filtered.
+
+    A source with ``status`` ``failed`` or ``partial`` is surfaced
+    explicitly so a blocked or broken board never silently vanishes.
+    """
+    stats: dict[str, SourceStat] = {}
+    for url in urls:
+        name = board_name_for_url(url)
+        stat = stats.setdefault(name, SourceStat(name=name))
+        stat.attempted += 1
+        stat.duration_ms += durations.get(url, 0.0) * 1000.0
+    for post in results:
+        name = board_name_for_url(post.url)
+        stat = stats.setdefault(name, SourceStat(name=name))
+        if post.error:
+            stat.errored += 1
+            stat.record_error(post.error)
+        else:
+            stat.ok += 1
+    return [stats[name] for name in sorted(stats)]
 
 
 def _split_csv(value: str | None) -> list[str]:

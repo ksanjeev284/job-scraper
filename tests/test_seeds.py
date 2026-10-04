@@ -139,9 +139,10 @@ def test_discover_seeds_cli_sweep(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[str] = []
     from jobscraper import cli as cli_mod
 
-    def fake_run(urls: list[str], **kwargs) -> tuple[list, int, int]:
+    def fake_run(urls: list[str], **kwargs) -> tuple:
         seen.extend(urls)
-        return ([], 0, 0)
+        assert kwargs.get("run_stats") is True
+        return ([], 0, 0, [])
 
     monkeypatch.setattr(cli_mod, "run_pipeline", fake_run)
     # Sweep only the ai category so the sweep stays tiny.

@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -523,3 +523,41 @@ BOARD_FETCHERS: list[Fetcher] = [
     fetch_eightfold,
     fetch_linkedin,
 ]
+
+
+# Host fragments used to attribute a posting URL to its board/source in
+# run diagnostics. Order matters only for readability; matches are
+# substring checks against the lowercased host.
+BOARD_HOSTS: tuple[tuple[str, str], ...] = (
+    ("lever.co", "lever"),
+    ("ashbyhq.com", "ashby"),
+    ("greenhouse.io", "greenhouse"),
+    ("smartrecruiters.com", "smartrecruiters"),
+    ("myworkdayjobs.com", "workday"),
+    ("teamtailor.com", "teamtailor"),
+    ("personio.de", "personio"),
+    ("recruitee.com", "recruitee"),
+    ("workable.com", "workable"),
+    ("breezy.hr", "breezy"),
+    ("pinpointhq.com", "pinpoint"),
+    ("rippling.com", "rippling"),
+    ("eightfold.ai", "eightfold"),
+    ("linkedin.com", "linkedin"),
+    ("remoteok.com", "remoteok"),
+    ("remotive.com", "remotive"),
+    ("weworkremotely.com", "weworkremotely"),
+    ("workingnomads.com", "workingnomads"),
+)
+
+
+def board_name_for_url(url: str) -> str:
+    """Classify a posting URL into its board/source name for diagnostics.
+
+    Returns a short board key (``"lever"``, ``"ashby"``, ...) or
+    ``"generic"`` for URLs that match no known board.
+    """
+    host = urlsplit(url).netloc.lower()
+    for fragment, name in BOARD_HOSTS:
+        if fragment in host:
+            return name
+    return "generic"
