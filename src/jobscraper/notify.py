@@ -25,6 +25,12 @@ more user-supplied webhook URLs. Three payload modes are supported:
   this mode. One message per run listing the ranked postings with their
   URLs (plain text, no formatting, so no Markdown escaping edge cases).
 
+Additionally, a fixed-endpoint ``email`` channel (not a webhook mode)
+sends one SMTP digest per run: an HTML email with the ranked postings
+as clickable job cards plus a plain-text fallback, using the settings
+resolved by ``smtp_settings`` (``JOBSCRAPER_SMTP_*`` env vars or the
+matching ``--smtp-*`` flags).
+
 Webhook URLs often carry secrets in their path, so they are never printed
 or logged in full: only the host is shown. Delivery failures are reported
 to the caller; they never raise into the CLI itself.
@@ -32,11 +38,16 @@ to the caller; they never raise into the CLI itself.
 
 from __future__ import annotations
 
+import html
 import json
 import os
+import smtplib
+import ssl
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from typing import Literal
 from urllib.parse import urlencode, urlsplit
 
@@ -392,6 +403,208 @@ def send_telegram(posts: list[Posting], *, token: str | None = None,
         return None, "skipped: no new postings"
     return _post_telegram(
         _TELEGRAM_ENDPOINT_TEMPLATE.format(token=resolved_token), fields)
+
+
+# --- SMTP email digest channel ------------------------------------------------
+
+# One HTML email per run with the ranked postings as clickable job cards,
+# so a cron/watch-mode schedule lands the day's matches in the inbox.
+# Auth is plain SMTP with STARTTLS (the Gmail/Outlook app-password
+# pattern); credentials come from the JOBSCRAPER_SMTP_* env vars or the
+# matching --smtp-* flags, and are never logged.
+_SMTP_HOST_ENV = "JOBSCRAPER_SMTP_HOST"
+_SMTP_PORT_ENV = "JOBSCRAPER_SMTP_PORT"
+_SMTP_USER_ENV = "JOBSCRAPER_SMTP_USER"
+_SMTP_PASSWORD_ENV = "JOBSCRAPER_SMTP_PASSWORD"
+_SMTP_FROM_ENV = "JOBSCRAPER_SMTP_FROM"
+_SMTP_TO_ENV = "JOBSCRAPER_SMTP_TO"
+_DEFAULT_SMTP_PORT = 587
+_SMTP_TIMEOUT_SECONDS = 30
+
+
+@dataclass
+class SMTPSettings:
+    """Resolved SMTP connection settings for the email digest channel."""
+
+    host: str
+    port: int = _DEFAULT_SMTP_PORT
+    user: str = ""
+    password: str = ""
+    from_addr: str = ""
+    to_addr: str = ""
+    use_tls: bool = True
+
+
+def smtp_settings(host: str | None = None,
+                  port: int | None = None,
+                  user: str | None = None,
+                  password: str | None = None,
+                  from_addr: str | None = None,
+                  to_addr: str | None = None,
+                  use_tls: bool = True) -> SMTPSettings:
+    """Resolve the SMTP settings for the email digest channel.
+
+    Explicit arguments win; each falls back to its ``JOBSCRAPER_SMTP_*``
+    environment variable. ``port`` defaults to 587; ``from_addr``
+    defaults to the SMTP username. Auth is skipped entirely when no
+    username is set (internal relays on localhost-style servers).
+    Raises ``ValueError`` naming the missing source when the host,
+    recipient, or the password for a given username is absent. The
+    password never appears in logs or error strings.
+    """
+    resolved_host = (host or os.environ.get(_SMTP_HOST_ENV, "")).strip()
+    raw_port = (port if port is not None
+                else os.environ.get(_SMTP_PORT_ENV, "").strip())
+    resolved_user = (user or os.environ.get(_SMTP_USER_ENV, "")).strip()
+    resolved_password = (password
+                         or os.environ.get(_SMTP_PASSWORD_ENV, "")).strip()
+    resolved_from = (from_addr
+                     or os.environ.get(_SMTP_FROM_ENV, "")).strip()
+    resolved_to = (to_addr or os.environ.get(_SMTP_TO_ENV, "")).strip()
+    missing = []
+    if not resolved_host:
+        missing.append(f"{_SMTP_HOST_ENV} (or --smtp-host)")
+    if not resolved_to:
+        missing.append(f"{_SMTP_TO_ENV} (or --smtp-to)")
+    if resolved_user and not resolved_password:
+        missing.append(f"{_SMTP_PASSWORD_ENV} (or --smtp-password)")
+    if missing:
+        raise ValueError(
+            "email mode needs SMTP settings: missing "
+            + ", ".join(missing))
+    try:
+        resolved_port = int(raw_port) if raw_port else _DEFAULT_SMTP_PORT
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"invalid SMTP port: {raw_port!r} "
+            f"(from --smtp-port or {_SMTP_PORT_ENV})") from None
+    return SMTPSettings(
+        host=resolved_host,
+        port=resolved_port,
+        user=resolved_user,
+        password=resolved_password,
+        from_addr=resolved_from or resolved_user,
+        to_addr=resolved_to,
+        use_tls=use_tls,
+    )
+
+
+def _selected(posts: list[Posting], only_new: bool,
+              top: int) -> tuple[list[Posting], int]:
+    """Ranked selection shared by the email builder and sender."""
+    ranked = _ranked(posts)
+    new_posts = [p for p in ranked if p.is_new]
+    selected = (new_posts if only_new else ranked)[:top]
+    return selected, len(new_posts)
+
+
+def _email_plain_lines(posts: list[Posting]) -> list[str]:
+    lines = []
+    for post in posts:
+        title, company, location, score = _display(post)
+        marker = " [NEW]" if post.is_new else ""
+        lines.append(f"{title} - {company} - {location} - "
+                     f"score {score}{marker}")
+        lines.append(post.url)
+    return lines
+
+
+def _email_card(post: Posting) -> str:
+    """One HTML job card; every field is escaped against posting text."""
+    title, company, location, score = _display(post)
+    title = html.escape(title, quote=True)
+    company = html.escape(company, quote=True)
+    location = html.escape(location, quote=True)
+    url = html.escape(post.url, quote=True)
+    meta = f"{company} &middot; {location} &middot; score {score}"
+    seniority = (post.seniority or "").strip()
+    if seniority and seniority != "unknown":
+        meta += f" &middot; {html.escape(seniority, quote=True)}"
+    if post.salary_hits:
+        meta += " &middot; " + ", ".join(
+            html.escape(hit, quote=True) for hit in post.salary_hits)
+    new = (" <span style=\"background:#16a34a;color:#fff;"
+           "padding:1px 6px;border-radius:3px;font-size:11px;\">NEW</span>"
+           if post.is_new else "")
+    return (f'<tr><td style="padding:10px;border:1px solid #ddd;">'
+            f'<a href="{url}" style="font-size:15px;">{title}</a>{new}<br>'
+            f'<span style="color:#555;font-size:13px;">{meta}</span></td></tr>')
+
+
+def build_email_message(posts: list[Posting], *, from_addr: str,
+                        to_addr: str, only_new: bool = False,
+                        top: int = 25) -> EmailMessage | None:
+    """Build the per-run HTML digest email.
+
+    A multipart message: a plain-text part (same one-line-per-posting
+    shape as the Pushover/Telegram channels) plus an HTML part with one
+    clickable job card per posting — title links to the posting, with
+    company, location, score, seniority, salary hits, and a NEW badge.
+    Returns ``None`` when ``only_new`` is set and nothing is new, which
+    the caller treats as "skip this email".
+    """
+    selected, new_count = _selected(posts, only_new, top)
+    if only_new and not selected:
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    summary = (f"{new_count} new" if new_count
+               else f"{len(_ranked(posts))} ranked")
+    message = EmailMessage()
+    message["Subject"] = f"Job scrape: {summary} ({stamp})"
+    message["From"] = from_addr
+    message["To"] = to_addr
+    lines = _email_plain_lines(selected) or ["(no postings)"]
+    message.set_content("\n".join(lines))
+    cards = "\n".join(_email_card(post) for post in selected)
+    if not cards:
+        cards = ('<tr><td style="padding:10px;">(no postings)</td></tr>')
+    body = (f"<html><body style=\"font-family:sans-serif;\">"
+            f"<h2>Job scrape &mdash; {html.escape(summary)} "
+            f"({html.escape(stamp)})</h2>"
+            f'<table style="border-collapse:collapse;width:100%;">'
+            f"{cards}</table>"
+            f'<p style="color:#888;font-size:12px;">Generated by '
+            f"job-scraper.</p></body></html>")
+    message.add_alternative(body, subtype="html")
+    return message
+
+
+def send_email_digest(posts: list[Posting], *,
+                      settings: SMTPSettings,
+                      only_new: bool = False,
+                      top: int = 25) -> tuple[bool | None, str]:
+    """Send one SMTP digest email for a set of postings.
+
+    Connects with STARTTLS (skippable via ``settings.use_tls`` for
+    internal relays), logs in only when a username is set, and sends a
+    single message to the configured recipient. Returns ``(ok,
+    detail)``; ``ok`` is ``None`` when ``only_new`` is set and nothing is
+    new. Raises ``ValueError`` from :func:`smtp_settings` when settings
+    are incomplete — callers resolve credentials first. The password
+    and recipient never appear in results, logs, or error strings.
+    """
+    selected, _ = _selected(posts, only_new, top)
+    if only_new and not selected:
+        return None, "skipped: no new postings"
+    message = build_email_message(posts, from_addr=settings.from_addr,
+                                  to_addr=settings.to_addr,
+                                  only_new=only_new, top=top)
+    host = settings.host
+    try:
+        with smtplib.SMTP(host, settings.port,
+                          timeout=_SMTP_TIMEOUT_SECONDS) as server:
+            server.ehlo()
+            if settings.use_tls:
+                server.starttls(context=ssl.create_default_context())
+                server.ehlo()
+            if settings.user:
+                server.login(settings.user, settings.password)
+            server.send_message(message)
+    except smtplib.SMTPException as exc:
+        return False, f"{host}: SMTP error: {exc}"
+    except OSError as exc:
+        return False, f"{host}: {exc.__class__.__name__}: {exc}"
+    return True, f"{host}: email digest delivered"
 
 
 def deliver(posts: list[Posting], urls: list[str], *,

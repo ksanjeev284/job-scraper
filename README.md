@@ -28,7 +28,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **JSONL export** — `--jsonl results.jsonl` writes one full posting record per line, ranked best-first: streams through `jq` and `grep`, appends cleanly across runs (`>>`)
 - **SQLite export** — `--sqlite jobs.db` upserts the ranked results by canonical URL (no new dependencies): `first_seen` keeps the original timestamp, `last_seen` advances and `scrape_count` increments on every re-run, so the database becomes a queryable history across runs (`SELECT title, company, score FROM postings WHERE live = 1 ORDER BY score DESC`); list fields stored as JSON text, full record in `raw_json`
 - **Source run-summary** — every run prints a per-board table (attempted / ok / errored / filtered, plus a `ok` / `partial` / `failed` / `empty` status and the top error messages) so a blocked or broken board can never silently vanish; programmatic access via `run_pipeline(..., run_stats=True)`
-- **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` / `--webhook-mode telegram` send a phone alert instead (see below)
+- **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` / `--webhook-mode telegram` send a phone alert, `--webhook-mode email` sends an SMTP digest to your inbox instead (see below)
 
 ## Web GUI
 
@@ -220,6 +220,11 @@ jobscraper --urls urls.txt --watch state.json --webhook-only-new \
 jobscraper --urls urls.txt --watch state.json --webhook-only-new \
   --webhook-mode telegram
 
+# Email digest to your inbox (SMTP settings via env vars or --smtp-*
+# flags; --webhook-url is ignored in this mode)
+jobscraper --urls urls.txt --watch state.json --webhook-only-new \
+  --webhook-mode email
+
 # Watch mode also tracks closures: postings seen in a previous run that
 # disappear are reported as "closed since last run" (fetch errors are
 # never treated as closures; a posting that reappears is reopened).
@@ -248,6 +253,24 @@ jobscraper --urls urls.txt --watch state.json
   the bot from your account and read your chat id from
   `https://api.telegram.org/bot<TOKEN>/getUpdates`. Credentials are
   never logged.
+- `--webhook-mode email` sends one SMTP digest email per run (a plain
+  + HTML multipart message): the ranked postings as clickable job
+  cards with title, company, location, score, seniority, salary hits
+  and a NEW badge, all posting text HTML-escaped. It needs the SMTP
+  settings from `JOBSCRAPER_SMTP_HOST` / `JOBSCRAPER_SMTP_PORT`
+  (default 587) / `JOBSCRAPER_SMTP_USER` /
+  `JOBSCRAPER_SMTP_PASSWORD` / `JOBSCRAPER_SMTP_FROM` (defaults to
+  the username) / `JOBSCRAPER_SMTP_TO`, or the matching
+  `--smtp-host` / `--smtp-port` / `--smtp-user` / `--smtp-password`
+  / `--smtp-from` / `--smtp-to` flags; STARTTLS is used unless
+  `--no-smtp-tls` is passed, and auth is skipped when no username is
+  set (internal relays). `--webhook-url` is ignored in this mode.
+  Example with Gmail (use an app password, never your real one):
+  `export JOBSCRAPER_SMTP_HOST=smtp.gmail.com
+  JOBSCRAPER_SMTP_USER=you@gmail.com
+  JOBSCRAPER_SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+  JOBSCRAPER_SMTP_TO=you@gmail.com`. The password and recipient
+  never appear in logs or error output.
 - `--webhook-only-new` skips the POST entirely when watch mode finds nothing
   new. `--webhook-top N` caps the postings included (default 25).
 - Webhook URLs carry secrets in their path: only the host is ever logged.

@@ -156,11 +156,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "Slack/Discord/Google Sheets/Notion recipes")
     parser.add_argument("--webhook-mode", default="plain",
                         choices=["plain", "slack", "discord", "pushover",
-                                 "telegram"],
+                                 "telegram", "email"],
                         help="Webhook payload format (default plain; "
                              "slack/discord send a chat notification; "
-                             "pushover/telegram send an alert via the "
-                             "Pushover API or a Telegram bot)")
+                             "pushover/telegram/email send an alert via the "
+                             "Pushover API, a Telegram bot, or SMTP email)")
     parser.add_argument("--pushover-token", default=None, metavar="TOKEN",
                         help="Pushover application token for --webhook-mode "
                              "pushover (or JOBSCRAPER_PUSHOVER_TOKEN)")
@@ -173,6 +173,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--telegram-chat-id", default=None, metavar="ID",
                         help="Telegram chat id for --webhook-mode telegram "
                              "(or JOBSCRAPER_TELEGRAM_CHAT_ID)")
+    parser.add_argument("--smtp-host", default=None, metavar="HOST",
+                        help="SMTP server host for --webhook-mode email "
+                             "(or JOBSCRAPER_SMTP_HOST)")
+    parser.add_argument("--smtp-port", type=int, default=None,
+                        metavar="PORT",
+                        help="SMTP server port for --webhook-mode email "
+                             "(default 587; or JOBSCRAPER_SMTP_PORT)")
+    parser.add_argument("--smtp-user", default=None, metavar="USER",
+                        help="SMTP username for --webhook-mode email "
+                             "(or JOBSCRAPER_SMTP_USER)")
+    parser.add_argument("--smtp-password", default=None, metavar="PASSWORD",
+                        help="SMTP password (app password) for "
+                             "--webhook-mode email "
+                             "(or JOBSCRAPER_SMTP_PASSWORD)")
+    parser.add_argument("--smtp-from", default=None, metavar="ADDRESS",
+                        help="From address for --webhook-mode email "
+                             "(defaults to the SMTP username; "
+                             "or JOBSCRAPER_SMTP_FROM)")
+    parser.add_argument("--smtp-to", default=None, metavar="ADDRESS",
+                        help="Recipient address for --webhook-mode email "
+                             "(or JOBSCRAPER_SMTP_TO)")
+    parser.add_argument("--no-smtp-tls", action="store_true",
+                        help="Skip STARTTLS for --webhook-mode email "
+                             "(for internal relays without TLS support)")
     parser.add_argument("--webhook-only-new", action="store_true",
                         help="With --watch, only notify about postings "
                              "flagged new since the last run "
@@ -392,21 +416,35 @@ def main(argv: list[str] | None = None) -> int:
 
     from jobscraper.notify import (
         deliver,
+        send_email_digest,
         send_pushover,
         send_telegram,
+        smtp_settings,
         webhook_urls_from_env,
     )
-    if args.webhook_mode in ("pushover", "telegram"):
+    if args.webhook_mode in ("pushover", "telegram", "email"):
         # Direct-notification channels: post to the fixed service endpoint;
         # --webhook-url is ignored in these modes.
         if args.webhook_mode == "pushover":
             sender, name = send_pushover, "Pushover"
             creds = {"token": args.pushover_token,
                      "user": args.pushover_user}
-        else:
+        elif args.webhook_mode == "telegram":
             sender, name = send_telegram, "Telegram"
             creds = {"token": args.telegram_token,
                      "chat_id": args.telegram_chat_id}
+        else:
+            sender, name = send_email_digest, "Email"
+            try:
+                settings = smtp_settings(
+                    host=args.smtp_host, port=args.smtp_port,
+                    user=args.smtp_user, password=args.smtp_password,
+                    from_addr=args.smtp_from, to_addr=args.smtp_to,
+                    use_tls=not args.no_smtp_tls)
+            except ValueError as exc:
+                print(f"Email: {exc}", file=sys.stderr)
+                return 1
+            creds = {"settings": settings}
         try:
             ok, detail = sender(
                 results, only_new=args.webhook_only_new,
@@ -422,7 +460,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{name} FAILED: {detail}", file=sys.stderr)
             return 1
     webhook_urls = list(args.webhook_url) + webhook_urls_from_env()
-    if webhook_urls and args.webhook_mode not in ("pushover", "telegram"):
+    if webhook_urls and args.webhook_mode not in ("pushover", "telegram",
+                                                  "email"):
         seen, deduped = set(), []
         for url in webhook_urls:
             if url not in seen:
