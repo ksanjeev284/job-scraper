@@ -384,6 +384,59 @@ def apply_watch(posts: list[Posting],
     return posts, new_count, closed
 
 
+def enrich_posting(post: Posting, meta: dict, full_text: str,
+                   sections: list[Section],
+                   profile: dict | None = None,
+                   tracker_path: str | None = None,
+                   no_score: bool = False) -> Posting:
+    """Populate a Posting's extracted fields from its text.
+
+    Runs requirements/skill/salary/seniority/signal extraction and
+    (unless ``no_score``) scoring against ``profile``. Shared by
+    :func:`process_url` (fetched pages) and sources that already hold
+    the full posting text (e.g. Hacker News comments), so both paths
+    enrich identically. ``meta`` carries ``title``, ``company``,
+    ``location``, ``employment_type``, ``department``, ``posted``,
+    ``source`` and optional ``salary_hits_extra``.
+    """
+    req, nice, resp, maybe = extract_requirements(sections)
+    post.title = meta.get("title") or post.title or None
+    post.company = meta.get("company")
+    post.location = meta.get("location")
+    post.employment_type = meta.get("employment_type")
+    post.department = meta.get("department")
+    post.posted = meta.get("posted")
+    post.age_days = posting_age_days(post.posted)
+    post.via = meta.get("source") or post.via or post.fetch_method
+    custom_skills = tuple(profile.get("custom_skills", [])
+                          ) if profile else ()
+    post.skills_found = find_skills(full_text, custom_skills)
+    post.experience_years_mentioned = find_experience(full_text)
+    seniority = infer_seniority(post.title, full_text,
+                               post.experience_years_mentioned)
+    post.seniority = seniority.level
+    post.seniority_evidence = seniority.evidence
+    post.job_type = normalize_job_type(post.employment_type, post.title,
+                                       full_text)
+    post.salary_hits = extract_salary(full_text)
+    post.salary_normalized = normalize_salary(post.salary_hits)
+    for extra in meta.get("salary_hits_extra") or []:
+        if extra and extra not in post.salary_hits:
+            post.salary_hits.append(extra)
+    post.signals = detect_signals(full_text)
+    post.requirements = req
+    post.nice_to_have = nice
+    post.responsibilities = resp
+    post.benefits = extract_benefits(sections)
+    post.other_possibly_relevant = maybe[:3]
+    post.sections = [Section(s.heading, s.text[:2000]) for s in sections]
+    post.full_text_chars = len(full_text)
+    post.tracker_status = check_tracker(post, tracker_path)
+    if profile is not None and not no_score and post.is_live is not False:
+        post.match = score_posting(post, profile)
+    return post
+
+
 def process_url(url: str, use_cache: bool = True,
                 profile: dict | None = None,
                 tracker_path: str | None = None,
@@ -490,39 +543,8 @@ def process_url(url: str, use_cache: bool = True,
                 f"only {len(full_text)} chars extracted; page may be "
                 "JS-gated or blocked")
 
-    req, nice, resp, maybe = extract_requirements(sections)
-    post.title = meta.get("title") or page_title or None
-    post.company = meta.get("company")
-    post.location = meta.get("location")
-    post.employment_type = meta.get("employment_type")
-    post.department = meta.get("department")
-    post.posted = meta.get("posted")
-    post.age_days = posting_age_days(post.posted)
-    post.via = meta.get("source") or post.fetch_method
-    custom_skills = tuple(profile.get("custom_skills", [])
-                          ) if profile else ()
-    post.skills_found = find_skills(full_text, custom_skills)
-    post.experience_years_mentioned = find_experience(full_text)
-    seniority = infer_seniority(post.title, full_text,
-                               post.experience_years_mentioned)
-    post.seniority = seniority.level
-    post.seniority_evidence = seniority.evidence
-    post.job_type = normalize_job_type(post.employment_type, post.title,
-                                       full_text)
-    post.salary_hits = extract_salary(full_text)
-    post.salary_normalized = normalize_salary(post.salary_hits)
-    for extra in meta.get("salary_hits_extra") or []:
-        if extra and extra not in post.salary_hits:
-            post.salary_hits.append(extra)
-    post.signals = detect_signals(full_text)
-    post.requirements = req
-    post.nice_to_have = nice
-    post.responsibilities = resp
-    post.benefits = extract_benefits(sections)
-    post.other_possibly_relevant = maybe[:3]
-    post.sections = [Section(s.heading, s.text[:2000]) for s in sections]
-    post.full_text_chars = len(full_text)
-    post.tracker_status = check_tracker(post, tracker_path)
-    if profile is not None and not no_score and post.is_live is not False:
-        post.match = score_posting(post, profile)
-    return post
+    if not meta.get("title"):
+        post.title = page_title or None  # fallback for enrich_posting
+    return enrich_posting(post, meta, full_text, sections,
+                            profile=profile, tracker_path=tracker_path,
+                            no_score=no_score)

@@ -14,6 +14,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Remote-only boards** — RemoteOK, Remotive, We Work Remotely, Working Nomads, Jobicy, Arbeitnow and Himalayas (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
 - **Workable cross-board search** — one keyword query across *every* Workable-hosted career board (jobs.workable.com public API): `jobscraper --workable-search "security engineer" --limit 20`
 - **The Muse cross-board search** — one keyword query across The Muse's aggregated listings (themuse.com public API): `jobscraper --themuse-search "security engineer" --themuse-location "India" --limit 20` (keywords match the title, company, level/category tags and description; `--themuse-location` and `--themuse-category` narrow results server-side)
+- **Hacker News "Who is hiring?" search** — scrape the current month's *Ask HN: Who is hiring?* thread (public Algolia + Firebase HN APIs, no auth): `jobscraper --hn-hiring "security engineer" --limit 20` (keywords match the title, company and comment text; `--hn-month YYYY-MM` pins a thread, `--hn-max-comments N` caps comment fetches)
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover eightfold:paypal:paypal.com`
 - **Seed-board registry** — `--discover-seeds fintech` sweeps a curated, live-verified registry of company career boards by category (`--list-seeds` shows it); omit the category to sweep them all
 - **14 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling, Eightfold AI — public APIs/feeds, no login
@@ -144,9 +145,12 @@ the candidate profile used for match scoring.
 | `--themuse-search KEYWORDS` | search The Muse's aggregated listings (themuse.com, public no-auth API) and scrape results |
 | `--themuse-location TEXT` | server-side location filter for `--themuse-search` (e.g. `"India"`) |
 | `--themuse-category TEXT` | server-side category filter for `--themuse-search` (e.g. `"Data Science"`) |
+| `--hn-hiring KEYWORDS` | search the month's "Ask HN: Who is hiring?" thread (Hacker News, public no-auth APIs) and scrape matching comments as postings |
+| `--hn-month YYYY-MM` | which Who-is-hiring thread to scrape (default: current month) |
+| `--hn-max-comments N` | max top-level HN comments to fetch for `--hn-hiring` (default 300) |
 | `--location TEXT` | location filter for `--linkedin` |
 | `--geo-id ID` | LinkedIn geoId for `--linkedin` (more reliable than text) |
-| `--limit N` | max search results to scrape for `--linkedin` / `--remote-boards` / `--workable-search` / `--themuse-search` (default 25) |
+| `--limit N` | max search results to scrape for `--linkedin` / `--remote-boards` / `--workable-search` / `--themuse-search` / `--hn-hiring` (default 25) |
 | `--days N` | only LinkedIn postings from the last N days |
 | `--remote MODE` | `onsite` / `remote` / `hybrid` filter for `--linkedin` |
 | `--discover BOARD:ID` | enumerate a career portal (repeatable; see below) |

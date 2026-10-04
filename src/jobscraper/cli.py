@@ -130,6 +130,18 @@ def build_parser() -> argparse.ArgumentParser:
                         metavar="CATEGORY",
                         help="Server-side category filter for "
                              "--themuse-search (e.g. \"Data Science\")")
+    parser.add_argument("--hn-hiring", default=None, metavar="KEYWORDS",
+                        help="Search the current month's \"Ask HN: Who is "
+                             "hiring?\" thread (Hacker News, public no-auth "
+                             "APIs) for KEYWORDS and scrape the matching "
+                             "comments as postings; keywords match the "
+                             "title, company and comment text")
+    parser.add_argument("--hn-month", default=None, metavar="YYYY-MM",
+                        help="Which Who-is-hiring thread to scrape "
+                             "(default: current month)")
+    parser.add_argument("--hn-max-comments", type=int, default=300,
+                        help="Max top-level HN comments to fetch for "
+                             "--hn-hiring (default 300)")
     parser.add_argument("--location", default=None,
                         help="Location filter for --linkedin "
                              "(e.g. \"Hyderabad, India\")")
@@ -138,7 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "than --location)")
     parser.add_argument("--limit", type=int, default=25,
                         help="Max --linkedin/--remote-boards/--workable-search/"
-                             "--themuse-search results to scrape "
+                             "--themuse-search/--hn-hiring results to scrape "
                              "(default 25)")
     parser.add_argument("--days", type=int, default=None,
                         help="Only LinkedIn postings from the last N days")
@@ -607,10 +619,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"themuse-search: {added} postings for "
               f"'{args.themuse_search}'")
 
-    if not urls:
-        print("error: give URLs or --urls file", file=sys.stderr)
-        return 2
-
     profile = load_profile(args.profile)
     problems = validate_profile(profile)
     if problems:
@@ -619,6 +627,39 @@ def main(argv: list[str] | None = None) -> int:
         for problem in problems:
             print(f"  - {problem}", file=sys.stderr)
         return 2
+
+    hn_postings = []
+    hn_stat = None
+    if args.hn_hiring:
+        from jobscraper.models import SourceStat
+        from jobscraper.sources.hn_hiring import (
+            build_postings,
+            scrape_hn_hiring,
+        )
+        try:
+            cards, thread = scrape_hn_hiring(
+                args.hn_hiring, month=args.hn_month,
+                limit=args.limit,
+                max_comments=args.hn_max_comments)
+        except Exception as exc:
+            print(f"hn-hiring FAILED: {exc}", file=sys.stderr)
+            return 1
+        hn_postings = build_postings(
+            cards, thread["time"], profile=profile,
+            tracker_path=args.tracker, no_score=args.no_score)
+        hn_stat = SourceStat(name="hn_whoishiring",
+                             attempted=len(cards),
+                             ok=len([p for p in hn_postings
+                                     if not p.error]),
+                             errored=len([p for p in hn_postings
+                                          if p.error]))
+        print(f"hn-hiring: {len(hn_postings)} postings for "
+              f"'{args.hn_hiring}' ({thread['title']})")
+
+    if not urls and not hn_postings:
+        print("error: give URLs or --urls file", file=sys.stderr)
+        return 2
+
     if args.locations:
         profile["locations"] = [loc.strip() for loc in
                                 args.locations.split(",") if loc.strip()]
@@ -634,7 +675,7 @@ def main(argv: list[str] | None = None) -> int:
     def progress(done: int, total: int) -> None:
         print(f"[{done}/{total}]", flush=True)
 
-    before = len(urls)
+    before = len(urls) + len(hn_postings)
     results, new_count, closed, stats = run_pipeline(
         urls, profile=profile, tracker_path=args.tracker,
         no_score=args.no_score, use_cache=not args.no_cache,
@@ -653,6 +694,44 @@ def main(argv: list[str] | None = None) -> int:
         browser_pool=args.browser_pool,
         detect_reposts=args.detect_reposts,
         progress_cb=progress, run_stats=True)
+    if hn_postings:
+        # HN comments arrive as finished postings (no page to fetch),
+        # so they get the same post-processing the pipeline applies to
+        # URL results: dedupe, filters, repost flags and watch state.
+        from jobscraper.pipeline import (
+            apply_filters,
+            apply_watch,
+            dedupe_results,
+        )
+        from jobscraper.reposts import mark_reposts
+        posts = (dedupe_results(hn_postings)
+                 if not args.no_dedupe else hn_postings)
+        from jobscraper.dedupe import (
+            fuzzy_dedupe_from_env,
+            fuzzy_dedupe_results,
+        )
+        if args.fuzzy_dedupe or fuzzy_dedupe_from_env():
+            posts, _ = fuzzy_dedupe_results(posts)
+        posts = apply_filters(
+            posts, args.location_filter, args.keyword_filter,
+            args.exclude_companies, args.exclude_keywords,
+            seniority_filter=args.seniority,
+            job_type_filter=args.job_type,
+            salary_min=args.min_salary, salary_max=args.max_salary,
+            max_age=args.max_age)
+        if args.min_score is not None:
+            posts = [p for p in posts
+                     if p.error or (p.match and
+                                    p.match.total >= args.min_score)]
+        results.extend(posts)
+        if args.detect_reposts:
+            mark_reposts(results)
+        if args.watch:
+            posts, hn_new, hn_closed = apply_watch(posts, args.watch)
+            new_count += hn_new
+            closed.extend(hn_closed)
+        if hn_stat is not None:
+            stats.append(hn_stat)
     after = sum(1 for p in results if not p.error)
     if before - after:
         print(f"Filtered {before - after} posting(s) out")

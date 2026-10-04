@@ -580,6 +580,7 @@ BOARD_HOSTS: tuple[tuple[str, str], ...] = (
     ("rippling.com", "rippling"),
     ("eightfold.ai", "eightfold"),
     ("themuse.com", "themuse"),
+    ("news.ycombinator.com", "hn_whoishiring"),
     ("linkedin.com", "linkedin"),
     ("remoteok.com", "remoteok"),
     ("remotive.com", "remotive"),
