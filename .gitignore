@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+
+# Test / lint
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# jobscraper outputs (never commit scrape results)
+scrape-*.json
+scrape-*.md
+scores.csv
+*.log

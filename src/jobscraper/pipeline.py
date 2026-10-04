@@ -1,0 +1,216 @@
+"""End-to-end pipeline: URL -> Posting.
+
+Tries board APIs first, then falls back through the render chain
+(requests -> Playwright) with a content-quality gate that understands
+SPA shells via their embedded job JSON. Every posting gets a liveness
+verdict and, optionally, a match score.
+"""
+
+from __future__ import annotations
+
+import re
+import time
+from datetime import datetime, timezone
+
+from bs4 import BeautifulSoup
+
+from jobscraper.boards import BOARD_FETCHERS
+from jobscraper.extract import (
+    MIN_CONTENT_CHARS,
+    check_liveness,
+    detect_signals,
+    extract_requirements,
+    extract_salary,
+    find_experience,
+    find_skills,
+    parse_description_html,
+    parse_embedded_job_json,
+    parse_json_ld,
+    soup_text,
+    split_sections,
+)
+from jobscraper.models import Posting, Section
+from jobscraper.rendering import fetch_playwright, fetch_requests
+from jobscraper.scoring import posting_age_days, score_posting
+
+
+def check_tracker(post: Posting, tracker_path: str | None) -> str | None:
+    """Return 'applied' if the posting URL already appears in a tracker file."""
+    if not tracker_path:
+        return None
+    try:
+        with open(tracker_path, errors="ignore") as fh:
+            blob = fh.read().lower()
+    except OSError:
+        return None
+    url = (post.url or "").lower().rstrip("/")
+    if url and (url in blob or url + "/" in blob):
+        return "applied"
+    return None
+
+
+def dedupe_key(post: Posting) -> tuple[str, str]:
+    """Normalize (company, title) so the same job on two boards dedupes."""
+
+    def norm(text: str | None) -> str:
+        text = re.sub(r"[^a-z0-9 ]", " ", (text or "").lower())
+        return re.sub(r"\s+", " ", text).strip()
+
+    title = norm(post.title)
+    title = re.sub(r"\b(senior|sr|junior|jr|lead|staff|principal|i{1,3}|iv)\b",
+                   "", title)
+    return norm(post.company), re.sub(r"\s+", " ", title).strip()
+
+
+def dedupe_results(posts: list[Posting]) -> list[Posting]:
+    """Drop cross-board duplicates, keeping the highest-scored copy."""
+    best: dict[tuple[str, str], Posting] = {}
+    skipped: set[int] = set()
+    for post in posts:
+        if post.error:
+            continue
+        key = dedupe_key(post)
+        if not key[0] or not key[1]:
+            skipped.add(id(post))  # nothing to match on; always keep
+            continue
+        score = post.match.total if post.match else -1
+        if key not in best or score > (best[key].match.total
+                                       if best[key].match else -1):
+            best[key] = post
+    kept = {id(p) for p in best.values()} | skipped
+    return [p for p in posts
+            if p.error or id(p) in kept]
+
+
+def process_url(url: str, use_cache: bool = True,
+                profile: dict | None = None,
+                tracker_path: str | None = None,
+                no_score: bool = False) -> Posting:
+    """Scrape one posting URL into a fully-populated :class:`Posting`."""
+    post = Posting(url=url,
+                   fetched_at=datetime.now(timezone.utc).isoformat())
+
+    # 1. Board API fast paths.
+    meta: dict | None = None
+    for fetcher in BOARD_FETCHERS:
+        try:
+            meta = fetcher(url)
+        except Exception as exc:
+            msg = str(exc)
+            post.board_errors.append(f"{fetcher.__name__}: {msg[:120]}")
+            if "404" in msg:
+                post.is_live = False
+                post.live_reason = \
+                    "board API returned 404: posting closed/removed"
+                return post
+        if meta:
+            break
+
+    if meta and meta.get("description_html"):
+        soup = parse_description_html(meta["description_html"])
+        full_text = soup_text(soup)
+        sections = split_sections(soup)
+        post.is_live, post.live_reason = check_liveness(full_text)
+    else:
+        # 2. Render chain with a content-quality gate.
+        html_text, page_title, method = "", "", None
+        embedded: dict | None = None
+        for fetch_fn in (fetch_requests, fetch_playwright):
+            # Two attempts per method: the egress path intermittently
+            # returns truncated bodies; a quick retry usually heals it.
+            for attempt in range(2):
+                try:
+                    page_title, html_text = fetch_fn(url,
+                                                     use_cache=use_cache)
+                    method = fetch_fn.__name__.replace("fetch_", "")
+                    soup_probe = BeautifulSoup(html_text, "lxml")
+                    embedded = parse_embedded_job_json(soup_probe)
+                    vis = BeautifulSoup(html_text, "lxml")
+                    for tag in vis(["script", "style"]):
+                        tag.decompose()
+                    nchars = len(soup_text(vis.body or vis))
+                    if nchars >= MIN_CONTENT_CHARS or (
+                            embedded and embedded.get("description_html")):
+                        break
+                    post.fetch_notes.append(
+                        f"{method} attempt {attempt + 1}: only {nchars} "
+                        "chars, no embedded job data")
+                    html_text, method, embedded = "", None, None
+                    time.sleep(3)
+                except Exception as exc:
+                    post.fetch_notes.append(
+                        f"{fetch_fn.__name__} attempt {attempt + 1}: "
+                        f"{str(exc)[:120]}")
+                    html_text, method, embedded = "", None, None
+                    time.sleep(3)
+            else:
+                post.fetch_notes.append(
+                    f"{fetch_fn.__name__}: exhausted, trying next method")
+                time.sleep(2)
+                continue
+            break
+        if not html_text:
+            post.error = ("all fetch methods failed or returned shells: "
+                          + " | ".join(post.fetch_notes))[:300]
+            post.is_live = None
+            post.live_reason = "could not fetch a readable page"
+            return post
+
+        post.fetch_method = method
+        soup = BeautifulSoup(html_text, "lxml")
+        if page_title is None:  # served from cache; re-derive
+            title_tag = soup.title
+            page_title = (title_tag.string.strip()
+                          if title_tag and title_tag.string else "")
+        if embedded and embedded.get("description_html"):
+            post.is_live, post.live_reason = \
+                True, "posting data embedded in page"
+        else:
+            post.is_live, post.live_reason = \
+                check_liveness(soup_text(soup.body or soup))
+        meta = parse_json_ld(soup)
+        if not meta.get("description_html") and embedded and embedded.get(
+                "description_html"):
+            meta = embedded
+        desc_html = meta.get("description_html", "")
+        if desc_html:
+            dsoup = parse_description_html(desc_html)
+            full_text = soup_text(dsoup)
+            sections = split_sections(dsoup)
+        else:  # strip chrome, use the whole page
+            for tag in soup(["script", "style", "nav", "header", "footer",
+                             "noscript"]):
+                tag.decompose()
+            full_text = soup_text(soup.body or soup)
+            sections = split_sections(soup)
+        if len(full_text) < MIN_CONTENT_CHARS:
+            post.low_content_warning = (
+                f"only {len(full_text)} chars extracted; page may be "
+                "JS-gated or blocked")
+
+    req, nice, resp, maybe = extract_requirements(sections)
+    post.title = meta.get("title") or page_title or None
+    post.company = meta.get("company")
+    post.location = meta.get("location")
+    post.employment_type = meta.get("employment_type")
+    post.department = meta.get("department")
+    post.posted = meta.get("posted")
+    post.age_days = posting_age_days(post.posted)
+    post.via = meta.get("source") or post.fetch_method
+    post.skills_found = find_skills(full_text)
+    post.experience_years_mentioned = find_experience(full_text)
+    post.salary_hits = extract_salary(full_text)
+    for extra in meta.get("salary_hits_extra") or []:
+        if extra and extra not in post.salary_hits:
+            post.salary_hits.append(extra)
+    post.signals = detect_signals(full_text)
+    post.requirements = req
+    post.nice_to_have = nice
+    post.responsibilities = resp
+    post.other_possibly_relevant = maybe[:3]
+    post.sections = [Section(s.heading, s.text[:2000]) for s in sections]
+    post.full_text_chars = len(full_text)
+    post.tracker_status = check_tracker(post, tracker_path)
+    if profile is not None and not no_score and post.is_live is not False:
+        post.match = score_posting(post, profile)
+    return post
