@@ -71,7 +71,7 @@ jobscraper --linkedin "data analyst" --location "Mumbai, India" \
   --profile examples/data-analyst.json --location-filter mumbai
 ```
 
-Outputs: `results.json` (full structured data), `report.md` (ranked summary + per-posting detail), `scores.csv` (spreadsheet).
+Outputs: `results.json` (full structured data), `report.md` (ranked summary + per-posting detail), `scores.csv` (spreadsheet), `report.html` (self-contained ranked HTML report with score breakdowns, inline CSS, no external assets; every scraped field is HTML-escaped so the report is safe to open in a browser).
 
 ### Candidate profile
 
@@ -96,6 +96,7 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--out PATH` | JSON output path |
 | `--md PATH` | Markdown report path |
 | `--csv PATH` | CSV export path |
+| `--html PATH` | HTML report path |
 | `--profile PATH` | candidate profile JSON for scoring |
 | `--no-score` | skip match scoring |
 | `--tracker PATH` | tracker file: postings whose URL appears are marked `applied` |
@@ -116,7 +117,7 @@ URL
  │   signals, liveness
  ├─ score against candidate profile (configurable role tiers)
  ├─ dedupe + tracker check
- └─ JSON / Markdown / CSV reports
+ └─ JSON / Markdown / CSV / HTML reports
 ```
 
 Discovery (`--discover BOARD:ID`) enumerates a whole career portal first:

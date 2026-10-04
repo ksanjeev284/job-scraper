@@ -19,8 +19,6 @@ Planned improvements, in rough priority order.
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [ ] Fixture-based regression tests (live posting, closed ATS API posting, SPA shell with embedded JSON, block page, duplicates, malformed responses)
 - [ ] Better heading detection for non-English postings
-- [ ] Structured benefits extraction (bonus, equity, visa sponsorship terms)
-- [ ] Posting-age parsing for relative dates ("2 days ago", "Posted 3 weeks ago")
 
 ## Scoring
 - [x] Profile schema validation with helpful errors
@@ -34,5 +32,5 @@ Planned improvements, in rough priority order.
 
 ## Reporting
 - [x] Web GUI service (FastAPI + browser UI, JSON/CSV export, Docker)
-- [ ] HTML report option
+- [x] HTML report option (self-contained, XSS-safe)
 - [ ] Notion / Google Sheets export hooks
