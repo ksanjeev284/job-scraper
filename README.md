@@ -103,6 +103,28 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--workers N` | parallel fetch workers (default 4) |
 | `--no-cache` | ignore the local 24h page cache |
 | `--no-dedupe` | keep cross-board duplicates |
+| `--proxy URL` | proxy URL for all requests (repeatable; rotated round-robin) |
+| `--proxies-file PATH` | text file with one proxy URL per line (`#` comments allowed) |
+
+### Proxy rotation
+
+For boards that rate-limit datacenter IPs, route requests through a proxy pool:
+
+```bash
+jobscraper --urls urls.txt --proxy http://user:pass@proxy1:8080 \
+  --proxy http://proxy2:8080 --profile my-profile.json
+
+# or from a file, or from the JOBSCRAPER_PROXIES env var
+# (whitespace/comma separated). Precedence: --proxy > --proxies-file > env.
+jobscraper --urls urls.txt --proxies-file proxies.txt
+```
+
+Requests are spread round-robin across the pool. A proxy that fails three
+requests in a row (connection refused, timeout, DNS) is parked for five
+minutes and then automatically re-enters the pool; if every proxy is parked,
+requests fall back to a direct connection rather than failing. HTTP error
+responses (429/5xx) are not counted against a proxy — the proxy did its job
+by delivering the response.
 
 ## How it works
 

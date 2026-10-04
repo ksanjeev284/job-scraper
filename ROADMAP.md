@@ -26,7 +26,7 @@ Planned improvements, in rough priority order.
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 
 ## Robustness
-- [ ] Optional proxy rotation support
+- [x] Optional proxy rotation support (`--proxy`, `--proxies-file`, `JOBSCRAPER_PROXIES`; round-robin with failure parking)
 - [ ] Headless-browser pool to reuse Chromium across postings
 - [ ] Respect `robots.txt` per host (opt-in flag)
 

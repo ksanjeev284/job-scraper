@@ -86,11 +86,38 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--watch", default=None, metavar="STATE.json",
                         help="Watch mode: flag postings never seen before; "
                              "seen postings persist in STATE.json")
+    parser.add_argument("--proxy", action="append", default=[],
+                        metavar="URL",
+                        help="Proxy URL for HTTP requests "
+                             "(e.g. http://user:pass@host:8080); "
+                             "repeatable, rotated round-robin")
+    parser.add_argument("--proxies-file", default=None, metavar="PATH",
+                        help="Text file with one proxy URL per line "
+                             "(# comments allowed)")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    from jobscraper.http import configure_proxies, load_proxies_file, proxies_from_env
+    proxy_specs = list(args.proxy)
+    if args.proxies_file:
+        try:
+            proxy_specs += load_proxies_file(args.proxies_file)
+        except OSError as exc:
+            print(f"error: cannot read --proxies-file: {exc}",
+                  file=sys.stderr)
+            return 2
+    if not proxy_specs:
+        proxy_specs = proxies_from_env()
+    if proxy_specs:
+        try:
+            configure_proxies(proxy_specs)
+        except ValueError as exc:
+            print(f"error: bad proxy: {exc}", file=sys.stderr)
+            return 2
+        print(f"proxies: {len(proxy_specs)} configured (round-robin)")
 
     urls = list(args.urls)
     if args.urlfile:

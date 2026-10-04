@@ -4,6 +4,13 @@ Every network call in jobscraper goes through :func:`http_get`, which
 applies per-domain rate limiting with jitter, rotates user agents, retries
 transient failures with exponential backoff, and fails fast on permanent
 ones (401/403/404).
+
+Optional proxy rotation: :func:`configure_proxies` installs a pool of proxy
+URLs (e.g. ``http://user:pass@host:8080``). ``http_get`` then picks a proxy
+round-robin per request. Proxies that fail :data:`PROXY_MAX_FAILURES` times
+in a row are parked for :data:`PROXY_PARK_SECONDS` seconds and re-enter the
+pool automatically afterwards; when every proxy is parked, requests go out
+directly rather than fail.
 """
 
 from __future__ import annotations
@@ -33,8 +40,21 @@ UA_POOL = [
 CACHE_DIR = os.path.expanduser("~/.cache/jobscraper")
 CACHE_TTL = 24 * 3600  # seconds
 
+#: Proxy URLs parked after this many consecutive failures re-enter the pool
+#: after PROXY_PARK_SECONDS. Tunable module constants for power users.
+PROXY_MAX_FAILURES = 3
+PROXY_PARK_SECONDS = 300.0
+
+_PROXY_SCHEMES = {"http", "https", "socks4", "socks5", "socks4h", "socks5h"}
+
 _domain_last_hit: dict[str, float] = {}
 _domain_lock = threading.Lock()
+
+_proxy_pool: list[str] = []
+_proxy_index = 0
+_proxy_lock = threading.Lock()
+_proxy_failures: dict[str, int] = {}
+_proxy_parked_until: dict[str, float] = {}
 
 
 def get_ua() -> str:
@@ -56,21 +76,26 @@ def polite_wait(url: str, base: float = 1.5) -> None:
 
 def http_get(url: str, timeout: int = 30,
              max_retries: int = 3) -> requests.Response:
-    """GET with retries, backoff and UA rotation.
+    """GET with retries, backoff, UA rotation and proxy rotation.
 
     Retries 429/5xx and network errors; fails fast on 401/403/404.
+    Each attempt uses the next proxy from the rotation pool (if any).
     Raises the last error when retries are exhausted.
     """
     last_err: Exception | None = None
     for attempt in range(max_retries):
         polite_wait(url)
+        proxy = next_proxy()
         try:
             resp = requests.get(
                 url,
                 headers={"User-Agent": get_ua(),
                          "Accept-Language": "en-US,en;q=0.9"},
+                proxies={"http": proxy, "https": proxy} if proxy else None,
                 timeout=timeout,
             )
+            if proxy:
+                mark_proxy_ok(proxy)
             if resp.status_code in (401, 403, 404):
                 raise requests.HTTPError(
                     f"HTTP {resp.status_code} (no retry)")
@@ -80,14 +105,138 @@ def http_get(url: str, timeout: int = 30,
             resp.raise_for_status()
             return resp
         except requests.HTTPError as exc:
+            # The proxy delivered a response, so it is not at fault;
+            # rotation alone moves the next attempt to another proxy.
             if "no retry" in str(exc):
                 raise
             last_err = exc
         except Exception as exc:  # network-level: DNS, timeouts, resets
             last_err = exc
+            if proxy:
+                mark_proxy_bad(proxy)
         time.sleep((2 ** attempt) + random.uniform(0, 1))
     assert last_err is not None
     raise last_err
+
+
+def parse_proxy(spec: str) -> str:
+    """Validate a proxy URL spec; return the cleaned spec.
+
+    Accepted form: ``scheme://[user:pass@]host[:port]`` where scheme is
+    http, https, socks4, socks5 (optionally with an ``h`` suffix for
+    remote DNS resolution). Raises :class:`ValueError` on invalid specs.
+    """
+    spec = spec.strip()
+    if not spec:
+        raise ValueError("empty proxy spec")
+    parsed = urlparse(spec)
+    if parsed.scheme.lower() not in _PROXY_SCHEMES:
+        raise ValueError(
+            f"bad proxy scheme in {spec!r} "
+            f"(want one of: {', '.join(sorted(_PROXY_SCHEMES))})")
+    if not parsed.hostname:
+        raise ValueError(f"no host in proxy spec {spec!r}")
+    return spec
+
+
+def configure_proxies(specs: list[str]) -> None:
+    """Install the proxy rotation pool, replacing any previous pool.
+
+    All specs are validated up front; a single bad spec aborts with
+    :class:`ValueError` and leaves the existing pool untouched.
+    Pass an empty list to disable proxies (direct connections).
+    """
+    validated = [parse_proxy(spec) for spec in specs]
+    with _proxy_lock:
+        global _proxy_pool, _proxy_index
+        _proxy_pool = validated
+        _proxy_index = 0
+        _proxy_failures.clear()
+        _proxy_parked_until.clear()
+
+
+def reset_proxies() -> None:
+    """Clear the proxy pool (direct connections from here on)."""
+    configure_proxies([])
+
+
+def load_proxies_file(path: str) -> list[str]:
+    """Read proxy URLs from a text file (one per line).
+
+    Blank lines and ``#`` comments are ignored.
+    """
+    specs: list[str] = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                specs.append(line)
+    return specs
+
+
+def proxies_from_env(var: str = "JOBSCRAPER_PROXIES") -> list[str]:
+    """Read proxies from an environment variable.
+
+    Accepts whitespace- or comma-separated proxy URLs; unset or blank
+    means no proxies.
+    """
+    raw = os.environ.get(var, "")
+    return [part for part in
+            [p.strip() for p in raw.replace(",", " ").split()]
+            if part]
+
+
+def proxy_count() -> int:
+    """Number of proxies currently in the pool (parked ones included)."""
+    with _proxy_lock:
+        return len(_proxy_pool)
+
+
+def _unparked(pool: list[str]) -> list[str]:
+    now = time.time()
+    return [p for p in pool
+            if _proxy_parked_until.get(p, 0.0) <= now]
+
+
+def next_proxy() -> str | None:
+    """Return the next proxy URL in round-robin order, or None.
+
+    Parked proxies are skipped. Returns None when no proxies are
+    configured or every proxy is currently parked (callers then fall
+    back to a direct connection).
+    """
+    with _proxy_lock:
+        if not _proxy_pool:
+            return None
+        candidates = _unparked(_proxy_pool)
+        if not candidates:
+            return None
+        global _proxy_index
+        chosen = candidates[_proxy_index % len(candidates)]
+        _proxy_index = (_proxy_index + 1) % len(candidates)
+        return chosen
+
+
+def mark_proxy_bad(proxy: str) -> None:
+    """Record a failed request through ``proxy``; park it on threshold.
+
+    A proxy with :data:`PROXY_MAX_FAILURES` consecutive failures stops
+    being handed out for :data:`PROXY_PARK_SECONDS` seconds.
+    """
+    with _proxy_lock:
+        if proxy not in _proxy_pool:
+            return
+        fails = _proxy_failures.get(proxy, 0) + 1
+        _proxy_failures[proxy] = fails
+        if fails >= PROXY_MAX_FAILURES:
+            _proxy_parked_until[proxy] = time.time() + PROXY_PARK_SECONDS
+            _proxy_failures[proxy] = 0
+
+
+def mark_proxy_ok(proxy: str) -> None:
+    """Clear a proxy's consecutive-failure streak after a good response."""
+    with _proxy_lock:
+        _proxy_failures.pop(proxy, None)
 
 
 def _cache_path(url: str) -> str:
