@@ -11,7 +11,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 ## Features
 
 - **LinkedIn as a source** — public guest job-search API (no login): `jobscraper --linkedin "soc analyst" --location "Hyderabad, India" --days 30`
-- **Remote-only boards** — RemoteOK, Remotive, We Work Remotely and Working Nomads (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
+- **Remote-only boards** — RemoteOK, Remotive, We Work Remotely, Working Nomads, Jobicy, Arbeitnow and Himalayas (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
 - **Workable cross-board search** — one keyword query across *every* Workable-hosted career board (jobs.workable.com public API): `jobscraper --workable-search "security engineer" --limit 20`
 - **The Muse cross-board search** — one keyword query across The Muse's aggregated listings (themuse.com public API): `jobscraper --themuse-search "security engineer" --themuse-location "India" --limit 20` (keywords match the title, company, level/category tags and description; `--themuse-location` and `--themuse-category` narrow results server-side)
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover eightfold:paypal:paypal.com`
@@ -138,7 +138,7 @@ the candidate profile used for match scoring.
 |---|---|
 | `--urls FILE` | file with one URL per line |
 | `--linkedin KEYWORDS` | search LinkedIn and scrape results |
-| `--remote-boards KEYWORDS` | search remote-only boards (RemoteOK, Remotive, We Work Remotely, Working Nomads) and scrape results |
+| `--remote-boards KEYWORDS` | search remote-only boards (RemoteOK, Remotive, We Work Remotely, Working Nomads, Jobicy, Arbeitnow, Himalayas) and scrape results |
 | `--workable-search KEYWORDS` | search every Workable-hosted career board (jobs.workable.com, public no-auth API) and scrape results |
 | `--themuse-search KEYWORDS` | search The Muse's aggregated listings (themuse.com, public no-auth API) and scrape results |
 | `--themuse-location TEXT` | server-side location filter for `--themuse-search` (e.g. `"India"`) |
@@ -407,7 +407,7 @@ jobscraper --discover-seeds ai --keyword-filter "security engineer" \
 jobscraper --discover-seeds                    # sweep every seed board
 ```
 
-Layout: `src/jobscraper/` — `boards.py` (ATS APIs + discovery), `seeds.py` (curated verified-board registry), `sources/linkedin.py` (LinkedIn guest API), `sources/remote_boards.py` (RemoteOK/Remotive/WWR/Working Nomads remote boards), `extract.py` (parsing), `scoring.py` (match scores), `rendering.py` (browser/HTTP fetch), `pipeline.py` (orchestration), `reporting.py` (outputs), `cli.py`, `models.py`, `http.py` (network plumbing).
+Layout: `src/jobscraper/` — `boards.py` (ATS APIs + discovery), `seeds.py` (curated verified-board registry), `sources/linkedin.py` (LinkedIn guest API), `sources/remote_boards.py` (RemoteOK/Remotive/WWR/Working Nomads/Jobicy/Arbeitnow/Himalayas remote boards), `extract.py` (parsing), `scoring.py` (match scores), `rendering.py` (browser/HTTP fetch), `pipeline.py` (orchestration), `reporting.py` (outputs), `cli.py`, `models.py`, `http.py` (network plumbing).
 
 ## What it doesn't cover
 

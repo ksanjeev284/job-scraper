@@ -99,7 +99,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "the results")
     parser.add_argument("--remote-boards", default=None, metavar="KEYWORDS",
                         help="Search remote-only job boards (RemoteOK, "
-                             "Remotive, We Work Remotely, Working Nomads) "
+                             "Remotive, We Work Remotely, Working Nomads, "
+                             "Jobicy, Arbeitnow, Himalayas) "
                              "for KEYWORDS and scrape the results")
     parser.add_argument("--workable-search", default=None, metavar="KEYWORDS",
                         help="Search every Workable-hosted career board at "

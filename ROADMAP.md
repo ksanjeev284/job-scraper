@@ -10,6 +10,7 @@ Planned improvements, in rough priority order.
 - [x] Full-board discovery: enumerate all open postings from a company career page (`--discover`)
 - [x] LinkedIn guest job-search API (no login)
 - [x] Remote-only boards (RemoteOK, Remotive, WeWorkRemotely, Working Nomads — JobSpy-style remote presets; `--remote-boards KEYWORDS`, client-side keyword filtering, cross-board de-dupe)
+- [x] Remote-only boards, part 2 (2026-10-04): Jobicy (namespaced RSS), Arbeitnow (public job-board API, ~325 recent), Himalayas (public `/jobs/api`, cursor-paged, one page/search) — all no-auth remote feeds wired into `--remote-boards` alongside the existing four
 - [x] Curated seed registry of verified company boards for `--discover` sweeps (`src/jobscraper/data/seeds.json`, 13 live-verified boards; `--discover-seeds CATEGORY`, `--list-seeds`)
 - [x] Eightfold AI (`{tenant}.eightfold.ai`): whole-board discovery via the public pcsx search API (`--discover eightfold:tenant:domain`, e.g. `eightfold:paypal:paypal.com`; pagination advances through 10-row pages) plus plain-HTTP posting fetch from server-rendered JobPosting JSON-LD; PayPal board added to the seed registry (live-verified, 288 postings on 2026-10-04)
 - [x] Workable cross-board search (`jobs.workable.com/api/v1/jobs`): one keyword query across every Workable-hosted career board via the public no-auth API (server-side search, `pageToken` cursor pagination; live-verified 2026-10-04) — `--workable-search KEYWORDS`

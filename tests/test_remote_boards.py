@@ -1,5 +1,5 @@
 """Tests for the remote-only job boards source (RemoteOK, Remotive,
-We Work Remotely, Working Nomads).
+We Work Remotely, Working Nomads, Jobicy, Arbeitnow, Himalayas).
 
 Parsers are exercised against frozen fixture payloads with no network
 access; only ``search_remote_boards``'s fetch dispatch is faked.
@@ -151,3 +151,76 @@ def test_search_survives_board_failure(monkeypatch):
 def test_search_ignores_unknown_board_names():
     cards = rb.search_remote_boards("security", boards=("nope",))
     assert cards == []
+
+
+def test_parse_jobicy_namespaced_fields():
+    cards = rb.parse_jobicy(_load("jobicy.xml"))
+    assert len(cards) == 2
+    first = cards[0]
+    assert first["title"] == "Senior Security Engineer"
+    assert first["company"] == "Northwind Labs"
+    assert first["location"] == "Worldwide"
+    assert first["url"] == "https://jobicy.com/jobs/900001-senior-security-engineer"
+    assert first["posted_text"] == "Sat, 03 Oct 2026 19:24:45 +0000"
+    assert first["tags"] == ["Software Engineering", "Full Time"]
+    assert first["source"] == "jobicy"
+    assert first["job_id"] == "jobicy:https://jobicy.com/jobs/900001-senior-security-engineer"
+    # blank location normalizes to Remote
+    assert cards[1]["location"] == "Remote"
+
+
+def test_parse_jobicy_malformed_returns_empty():
+    assert rb.parse_jobicy("<not xml") == []
+
+
+def test_parse_arbeitnow():
+    cards = rb.parse_arbeitnow(json.loads(_load("arbeitnow.json")))
+    assert len(cards) == 2
+    first = cards[0]
+    assert first["title"] == "Security Engineer (Detection)"
+    assert first["company"] == "Northwind Labs"
+    assert first["location"] == "Berlin (Remote)"
+    assert first["url"] == ("https://www.arbeitnow.com/jobs/companies/"
+                           "northwind-labs/security-engineer-berlin-90001")
+    assert first["posted_text"] == "2026-10-03T04:00:00Z"
+    assert first["tags"] == ["Security", "SIEM", "Full Time"]
+    assert first["source"] == "arbeitnow"
+    # non-remote posting keeps its location unchanged
+    assert cards[1]["location"] == "Munich"
+
+
+def test_parse_arbeitnow_malformed_returns_empty():
+    assert rb.parse_arbeitnow({"no": "data"}) == []
+    assert rb.parse_arbeitnow(None) == []
+
+
+def test_parse_himalayas():
+    cards = rb.parse_himalayas(json.loads(_load("himalayas.json")))
+    assert len(cards) == 2
+    first = cards[0]
+    assert first["title"] == "Security Engineer (Detection)"
+    assert first["company"] == "Northwind Labs"
+    assert first["location"] == "Worldwide"
+    assert first["url"] == ("https://himalayas.app/companies/northwind-labs/"
+                            "jobs/security-engineer-detection")
+    assert first["posted_text"] == "2026-10-03T04:00:00Z"
+    assert first["tags"] == ["Security-Engineering", "Detection", "SIEM"]
+    assert first["source"] == "himalayas"
+    # empty location restrictions normalize to Remote
+    assert cards[1]["location"] == "Remote"
+
+
+def test_parse_himalayas_malformed_returns_empty():
+    assert rb.parse_himalayas([]) == []
+    assert rb.parse_himalayas({"jobs": "nope"}) == []
+
+
+def test_epoch_to_iso_rejects_garbage():
+    assert rb._epoch_to_iso(None) is None
+    assert rb._epoch_to_iso("not-a-number") is None
+
+
+def test_boards_tuple_includes_new_boards():
+    for board in ("jobicy", "arbeitnow", "himalayas"):
+        assert board in rb.BOARDS
+        assert board in rb._FETCHERS

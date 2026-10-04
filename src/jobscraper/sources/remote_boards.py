@@ -1,6 +1,7 @@
-"""Remote-only job boards: RemoteOK, Remotive, We Work Remotely, Working Nomads.
+"""Remote-only job boards: RemoteOK, Remotive, We Work Remotely, Working Nomads,
+Jobicy, Arbeitnow and Himalayas.
 
-All four expose a public, no-authentication feed of remote-only listings
+All seven expose a public, no-authentication feed of remote-only listings
 (JobSpy-style remote presets). Because every result is remote, the
 ``location`` argument that LinkedIn searches take is ignored here; callers
 filter by keyword instead:
@@ -21,6 +22,18 @@ filter by keyword instead:
 - Working Nomads:   GET https://www.workingnomads.com/api/exposed_jobs/ —
                     flat JSON array. ``url`` is a /job/go/<id>/ redirect to
                     the real posting.
+- Jobicy:           GET https://jobicy.com/?feed=job_feed — RSS feed; company,
+                    location, job type and category live in the
+                    ``job_listing`` (https://jobicy.com) XML namespace.
+- Arbeitnow:        GET https://www.arbeitnow.com/api/job-board-api — JSON
+                    object with a ``data`` array of the most recent ~325
+                    postings; ``created_at`` is a Unix timestamp. Company
+                    cards carry a canonical ``url``.
+- Himalayas:       GET https://himalayas.app/jobs/api — JSON object with a
+                    ``jobs`` array and a ``nextCursor`` for further paging
+                    (cursor preferred by the API); one ~20-job page is fetched
+                    per search. ``pubDate`` is a Unix timestamp and
+                    ``applicationLink`` is the canonical job URL.
 
 Each search function returns card dicts shaped like
 ``jobscraper.sources.linkedin.parse_search_cards``:
@@ -33,6 +46,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from jobscraper.http import http_get, polite_wait
@@ -41,13 +55,28 @@ REMOTEOK_URL = "https://remoteok.com/api"
 REMOTIVE_URL = "https://remotive.com/api/remote-jobs"
 WWR_FEED_URL = "https://weworkremotely.com/remote-jobs.rss"
 WORKINGNOMADS_URL = "https://www.workingnomads.com/api/exposed_jobs/"
+JOBICY_FEED_URL = "https://jobicy.com/?feed=job_feed"
+ARBEITNOW_URL = "https://www.arbeitnow.com/api/job-board-api"
+HIMALAYAS_URL = "https://himalayas.app/jobs/api"
+JOBICY_NS = "https://jobicy.com"
 
-BOARDS = ("remoteok", "remotive", "weworkremotely", "workingnomads")
+BOARDS = ("remoteok", "remotive", "weworkremotely", "workingnomads",
+          "jobicy", "arbeitnow", "himalayas")
 
 
 def _text(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
+
+
+def _epoch_to_iso(value: object) -> str | None:
+    """Normalize a Unix timestamp (seconds) to an ISO 8601 UTC string."""
+    try:
+        epoch = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
 
 
 def matches_keywords(card: dict, keywords: str) -> bool:
@@ -201,11 +230,128 @@ def fetch_workingnomads() -> list[dict]:
     return parse_workingnomads(http_get(WORKINGNOMADS_URL).json())
 
 
+def parse_jobicy(text: str) -> list[dict]:
+    """Parse a Jobicy RSS feed into card dicts.
+
+    Company/location/job type/category live in the ``job_listing``
+    (https://jobicy.com) XML namespace; title and link are plain RSS.
+    """
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return []
+
+    def job_field(item: ET.Element, name: str) -> str | None:
+        return _text(item.findtext(f"{{{JOBICY_NS}}}{name}"))
+
+    cards: list[dict] = []
+    for item in root.iter("item"):
+        link = _text(item.findtext("link"))
+        cards.append({
+            "job_id": f"jobicy:{link}" if link else f"jobicy:{item.findtext('title')}",
+            "title": _text(item.findtext("title")),
+            "company": job_field(item, "company"),
+            "location": job_field(item, "location") or "Remote",
+            "url": link,
+            "posted_text": _text(item.findtext("pubDate")),
+            "tags": [t for t in (job_field(item, "category"),
+                                 job_field(item, "job_type")) if t],
+            "source": "jobicy",
+        })
+    return cards
+
+
+def parse_arbeitnow(payload: object) -> list[dict]:
+    """Parse an Arbeitnow /api/job-board-api JSON payload into card dicts."""
+    if not isinstance(payload, dict):
+        return []
+    jobs = payload.get("data")
+    if not isinstance(jobs, list):
+        return []
+    cards: list[dict] = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        url = _text(job.get("url"))
+        location = _text(job.get("location"))
+        if job.get("remote") and location:
+            location = f"{location} (Remote)"
+        elif not location:
+            location = "Remote"
+        tags = list(job.get("tags") or []) + list(job.get("job_types") or [])
+        cards.append({
+            "job_id": f"arbeitnow:{url}" if url else f"arbeitnow:{job.get('slug')}",
+            "title": _text(job.get("title")),
+            "company": _text(job.get("company_name")),
+            "location": location,
+            "url": url,
+            "posted_text": _epoch_to_iso(job.get("created_at")),
+            "tags": tags,
+            "source": "arbeitnow",
+        })
+    return cards
+
+
+def parse_himalayas(payload: object) -> list[dict]:
+    """Parse a Himalayas /jobs/api JSON payload into card dicts."""
+    if not isinstance(payload, dict):
+        return []
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        return []
+    cards: list[dict] = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        url = _text(job.get("applicationLink")) or _text(job.get("guid"))
+        restrictions = job.get("locationRestrictions") or []
+        location = ", ".join(str(r) for r in restrictions) or "Remote"
+        tags = list(job.get("categories") or [])
+        slug = job.get("companySlug")
+        cards.append({
+            "job_id": f"himalayas:{url}" if url else f"himalayas:{slug}",
+            "title": _text(job.get("title")),
+            "company": _text(job.get("companyName")),
+            "location": location,
+            "url": url,
+            "posted_text": _epoch_to_iso(job.get("pubDate")),
+            "tags": tags,
+            "source": "himalayas",
+        })
+    return cards
+
+
+def fetch_jobicy() -> list[dict]:
+    """Fetch the Jobicy remote-jobs RSS feed (one request)."""
+    polite_wait(JOBICY_FEED_URL, base=2.0)
+    return parse_jobicy(http_get(JOBICY_FEED_URL).text)
+
+
+def fetch_arbeitnow() -> list[dict]:
+    """Fetch the Arbeitnow job-board API (one request, no pagination)."""
+    polite_wait(ARBEITNOW_URL, base=2.0)
+    return parse_arbeitnow(http_get(ARBEITNOW_URL).json())
+
+
+def fetch_himalayas() -> list[dict]:
+    """Fetch one page of the Himalayas remote-jobs API.
+
+    The API caps pages at ~20 jobs (cursor paging continues the feed, but
+    one page per search keeps request volume low).
+    """
+    polite_wait(HIMALAYAS_URL, base=2.0)
+    data = http_get(HIMALAYAS_URL + "?" + urlencode({"limit": "100"})).json()
+    return parse_himalayas(data)
+
+
 _FETCHERS: dict[str, Callable[[str, int], list[dict]]] = {
     "remoteok": lambda _kw, _limit: fetch_remoteok(),
     "remotive": lambda kw, limit: fetch_remotive(kw, limit=limit),
     "weworkremotely": lambda _kw, _limit: fetch_wwr(),
     "workingnomads": lambda _kw, _limit: fetch_workingnomads(),
+    "jobicy": lambda _kw, _limit: fetch_jobicy(),
+    "arbeitnow": lambda _kw, _limit: fetch_arbeitnow(),
+    "himalayas": lambda _kw, _limit: fetch_himalayas(),
 }
 
 
