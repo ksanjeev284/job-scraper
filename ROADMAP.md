@@ -20,7 +20,7 @@ Planned improvements, in rough priority order.
 - [x] Watch mode: detect closed/removed postings since last run (recorded with `closed_since`; fetch errors are never treated as closures, reappearing postings are reopened)
 - [x] Company and title-keyword exclusions
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
-- [ ] Fixture-based regression tests (live posting, closed ATS API posting, SPA shell with embedded JSON, block page, duplicates, malformed responses)
+- [x] Fixture-based regression tests (frozen Lever/Ashby/Greenhouse API payloads, SPA shell with embedded JSON, Next.js shell, JSON-LD page, closed posting, block page, duplicates, malformed responses — `tests/fixtures/`, `tests/test_fixtures.py`)
 - [ ] Better heading detection for non-English postings
 
 ## Scoring

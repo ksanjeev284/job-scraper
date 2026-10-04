@@ -223,11 +223,17 @@ pip install -e ".[dev]"
 pytest
 ```
 
+`tests/fixtures/` holds frozen snapshots of real-world shapes (Lever, Ashby
+and Greenhouse API payloads; SPA shells with embedded `window.__appData` and
+Next.js `__NEXT_DATA__` job data; a JSON-LD posting page; a closed posting;
+a bot-block page; a malformed API response). `tests/test_fixtures.py` drives
+them through the fetchers, parsers and full pipeline with no network access,
+so a board API changing shape or an extraction regression shows up here first.
+
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the remaining planned work (fixture-based
-regression tests, non-English heading detection, headless-browser pool,
-`robots.txt` support).
+See [ROADMAP.md](ROADMAP.md) for the remaining planned work (non-English
+heading detection, headless-browser pool, `robots.txt` support).
 
 ## License
 
