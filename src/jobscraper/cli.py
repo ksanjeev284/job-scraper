@@ -105,6 +105,20 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Search every Workable-hosted career board at "
                              "once (jobs.workable.com, public no-auth API) "
                              "for KEYWORDS and scrape the results")
+    parser.add_argument("--themuse-search", default=None, metavar="KEYWORDS",
+                        help="Search The Muse's aggregated listings "
+                             "(themuse.com, public no-auth API) for "
+                             "KEYWORDS and scrape the results; keywords "
+                             "match the title, company, level/category "
+                             "tags and description")
+    parser.add_argument("--themuse-location", default=None,
+                        metavar="LOCATION",
+                        help="Server-side location filter for "
+                             "--themuse-search (e.g. \"India\")")
+    parser.add_argument("--themuse-category", default=None,
+                        metavar="CATEGORY",
+                        help="Server-side category filter for "
+                             "--themuse-search (e.g. \"Data Science\")")
     parser.add_argument("--location", default=None,
                         help="Location filter for --linkedin "
                              "(e.g. \"Hyderabad, India\")")
@@ -112,8 +126,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="LinkedIn geoId for --linkedin (more reliable "
                              "than --location)")
     parser.add_argument("--limit", type=int, default=25,
-                        help="Max --linkedin/--remote-boards/--workable-search "
-                             "results to scrape (default 25)")
+                        help="Max --linkedin/--remote-boards/--workable-search/"
+                             "--themuse-search results to scrape "
+                             "(default 25)")
     parser.add_argument("--days", type=int, default=None,
                         help="Only LinkedIn postings from the last N days")
     parser.add_argument("--remote", default=None,
@@ -471,6 +486,22 @@ def main(argv: list[str] | None = None) -> int:
                     break
         print(f"workable-search: {added} postings for "
               f"'{args.workable_search}'")
+
+    if args.themuse_search:
+        from jobscraper.sources.themuse import search_themuse
+        cards = search_themuse(args.themuse_search,
+                               location=args.themuse_location,
+                               category=args.themuse_category,
+                               limit=args.limit)
+        added = 0
+        for card in cards:
+            if card.get("url") and card["url"] not in urls:
+                urls.append(card["url"])
+                added += 1
+                if added >= args.limit:
+                    break
+        print(f"themuse-search: {added} postings for "
+              f"'{args.themuse_search}'")
 
     if not urls:
         print("error: give URLs or --urls file", file=sys.stderr)

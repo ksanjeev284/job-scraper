@@ -1,0 +1,77 @@
+{
+ "page": 0,
+ "page_count": 305,
+ "total": 6084,
+ "results": [
+  {
+   "id": 22229841,
+   "name": "Principal Technical Product Manager - Commerce (Billing & Monetization)",
+   "company": {
+    "id": 741,
+    "short_name": "atlassian",
+    "name": "Atlassian"
+   },
+   "locations": [
+    {
+     "name": "Bangalore, India"
+    },
+    {
+     "name": "Flexible / Remote"
+    }
+   ],
+   "levels": [
+    {
+     "name": "Senior Level",
+     "short_name": "senior"
+    }
+   ],
+   "categories": [],
+   "refs": {
+    "landing_page": "https://www.themuse.com/jobs/atlassian/principal-technical-product-manager-commerce-billing-monetization"
+   },
+   "publication_date": "2026-10-03T21:25:38Z",
+   "contents": "<p><strong>Working at Atlassian</strong><br><br>Atlassians can choose where they work  whether in an office, from home, or a combination of the two. That way, Atlassians have more control over supporting their family, personal goals, and other priorities. We can hire people in any country where we have a legal entity.<br><br><strong>About the Commerce Platform Team</strong><br>Commerce Platform is a foundational organization at Atlassian powering how products are<br>packaged, priced, billed, and managed across the ecosystem. It underpins quoting, billing,<br>subscription management, and payment orchestration across all Atlassian products and<br>customer segments. As a Principal Technical Program Manager, you will lead high-visibility<br>programs in close partnership with Product, Engineering, Finance, and Go-To-Market to build<br>durable, scalable capabilities for the future.<br><br><strong>What you'll do</strong><br><br><ul><li>Drive Platform Strategy &amp; Roadmaps: Partner with Product and Engineering<br>leadership to define multi-year strategic roadmaps for core commerce capabilities<br>(billing, quoting, subscription management, and payment processing).</li><li>Translate Business Strategy into Execution: Connect enterprise business models,<br>global tax rules, multi-currency strategies, and compliance requirements to clear<br>platform milestones and cross-team delivery plans.</li><li>Lead Flagship Commerce Programs: Orchestrate complex, multi-team programs from<br>incept"
+  },
+  {
+   "id": 22094692,
+   "name": "Sales Engineer, Mid Market - Midwest",
+   "company": {
+    "id": 15000209,
+    "short_name": "samsarainc",
+    "name": "Samsara Inc."
+   },
+   "locations": [
+    {
+     "name": "Flexible / Remote"
+    }
+   ],
+   "levels": [
+    {
+     "name": "Mid Level",
+     "short_name": "mid"
+    }
+   ],
+   "categories": [
+    {
+     "name": "Software Engineering"
+    }
+   ],
+   "refs": {
+    "landing_page": "https://www.themuse.com/jobs/samsarainc/sales-engineer-mid-market-midwest-4275f4"
+   },
+   "publication_date": "2026-09-30T19:06:05Z",
+   "contents": "<div><p><span><strong>Who we are</strong></span></p>\n<p><span>Samsara (NYSE: IOT) is the pioneer of the Connected Operations™ Cloud, which is a platform that enables organizations that depend on physical operations to harness Internet of Things (IoT) data to develop actionable insights and improve their operations. At Samsara, we are helping improve the safety, efficiency and sustainability of the physical operations that power our global economy. Representing more than 40% of global GDP, these industries are the infrastructure of our planet, including agriculture, construction, field services, transportation, and manufacturing — and we are excited to help digitally transform their operations at scale.</span></p>\n<p><span>Working at Samsara means you’ll help define the future of physical operations and be on a team that’s shaping an exciting array of product solutions, including Video-Based Safety, Vehicle Telematics, Apps and Driver Workflows, and Equipment Monitoring. As part of a recently public company, you’ll have the autonomy and support to make an impact as we build for the long term.</span></p></div>\n\n<p><strong>About the role:</strong></p>\n\n<p>As a Sales Engineer at Samsara, you’d be an integral part of a diverse team working to help modernize essential industries through the application of cutting edge IoT solutions.&nbsp; Your work would directly contribute to a cleaner, more efficient and productive supply chain by creating safer roadways, reducing fuel consumptio"
+  },
+  {
+   "id": 999,
+   "name": "  Test Engineer (QA)  ",
+   "company": null,
+   "locations": [],
+   "levels": null,
+   "categories": null,
+   "refs": {},
+   "publication_date": null,
+   "contents": "<p>qa testing</p>"
+  }
+ ]
+}
