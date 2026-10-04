@@ -35,19 +35,30 @@ from jobscraper.http import configure_robots, robots_from_env
 from jobscraper.models import Posting, Section
 from jobscraper.rendering import fetch_playwright, fetch_requests
 from jobscraper.scoring import posting_age_days, score_posting
+from jobscraper.urls import canonicalize_url, input_dedupe
 
 
 def check_tracker(post: Posting, tracker_path: str | None) -> str | None:
-    """Return 'applied' if the posting URL already appears in a tracker file."""
+    """Return 'applied' if the posting URL already appears in a tracker file.
+
+    Both the posting URL and every URL mentioned in the tracker file are
+    canonicalized before comparing, so a tracker entry saved with or
+    without tracking parameters still matches. Lines that do not contain
+    a plain URL keep the old substring-match behavior.
+    """
     if not tracker_path:
         return None
     try:
         with open(tracker_path, errors="ignore") as fh:
-            blob = fh.read().lower()
+            text = fh.read().lower()
     except OSError:
         return None
-    url = (post.url or "").lower().rstrip("/")
-    if url and (url in blob or url + "/" in blob):
+    url = canonicalize_url((post.url or "").lower())
+    if not url:
+        return None
+    mentioned = {canonicalize_url(u)
+                 for u in re.findall(r"https?://[^\s<>()\"']+", text)}
+    if url in mentioned or url in text:
         return "applied"
     return None
 
@@ -110,6 +121,11 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     configure_robots(respect_robots or robots_from_env())
+
+    # Canonicalize up front: the same posting shared with different
+    # tracking parameters (or host case / trailing slash) is fetched once
+    # and reported under one clean URL.
+    urls = [canonicalize_url(u) for u in input_dedupe(urls)]
 
     def work(url: str):
         try:
