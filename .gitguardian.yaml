@@ -1,0 +1,11 @@
+# GitGuardian ignores: test fixtures that look like secrets but are not.
+# tests/test_notify.py uses the dummy canary value "s3cret" for
+# JOBSCRAPER_SMTP_PASSWORD via monkeypatch.setenv — it is never a real
+# credential (test SMTP host is smtp.example.com, user is "bot").
+version: 2
+secret:
+  ignore:
+    - paths:
+        - "tests/test_notify.py"
+      matches:
+        - name: "Generic Password"
