@@ -135,7 +135,28 @@ SALARY_RE = re.compile(
     r"(?:₹|Rs\.?|INR)\s?[\d,]{2,}(?:\.\d+)?\s?(?:lakh|LPA|Lpa)?"
     r"|[\d.]+\s*(?:lakh|LPA)"
     r"|€\s?[\d.,]{3,}\s?k?"
-    r"|\$\s?[\d,]{3,}\s?k?", re.I)
+    r"|\$\s?[\d,]{3,}\s?k?"
+    r"|£\s?[\d,]{3,}\s?k?", re.I)
+
+# Pay-period markers (JobSpy-style enforce_annual_salary): an optional
+# "/hr", "per month", "hourly", "p.a.", ... suffix adjacent to a figure.
+_PERIOD_MARKER = (
+    r"(?:/\s*(?:hour|hr\b|day|week|wk\b|month|mo\b|year|yr\b)"
+    r"|per\s+(?:hour|day|week|month|year|annum)"
+    r"|hourly|daily|weekly|monthly|yearly|annually|annual"
+    r"|p\.a\.?)"
+)
+_PERIOD_AFTER = re.compile(r"\s*" + _PERIOD_MARKER, re.I)
+_TRAILING_PERIOD = re.compile(r"\s*" + _PERIOD_MARKER + r"\s*$", re.I)
+
+# Short figures (e.g. "$50/hr") only count as salary when a pay-period
+# marker is attached; unmarked short figures stay below the threshold.
+_SHORT_SALARY_RE = re.compile(
+    r"(?:₹|Rs\.?|INR)\s?[\d,]{1,}(?:\.\d+)?\s?(?:lakh|LPA|Lpa)?"
+    + _PERIOD_MARKER +
+    r"|€\s?[\d.,]{2,}\s?k?" + _PERIOD_MARKER +
+    r"|\$\s?[\d,]{2,}\s?k?" + _PERIOD_MARKER +
+    r"|£\s?[\d,]{2,}\s?k?" + _PERIOD_MARKER, re.I)
 
 SPONSOR_RE = re.compile(
     r"(visa sponsorship|sponsori\w*|work permit|blue card|relocation"
@@ -269,8 +290,32 @@ def find_experience(text: str) -> list[int]:
 
 
 def extract_salary(text: str) -> list[str]:
-    """Extract salary figures (INR/LPA, EUR, USD)."""
-    return sorted({m.group(0).strip() for m in SALARY_RE.finditer(text)})[:5]
+    """Extract salary figures (INR/LPA, EUR, USD, GBP).
+
+    An adjacent pay-period marker ("/hr", "per month", ...) is kept on the
+    hit so :func:`normalize_salary` can annualize it. Short figures only
+    count when a pay-period marker is attached ("$50/hr").
+    """
+    hits: set[str] = set()
+    seen: set[str] = set()  # whitespace-normalized, for cross-regex dedupe
+
+    def _add(hit: str) -> None:
+        key = re.sub(r"\s+", "", hit)
+        if key not in seen:
+            seen.add(key)
+            hits.add(hit)
+
+    for m in SALARY_RE.finditer(text):
+        hit = m.group(0).strip()
+        tail = _PERIOD_AFTER.match(text, m.end())
+        if tail:
+            raw_tail = tail.group(0).strip()
+            sep = "" if raw_tail.startswith("/") else " "
+            hit = f"{hit}{sep}{raw_tail}".strip()
+        _add(hit)
+    for m in _SHORT_SALARY_RE.finditer(text):
+        _add(m.group(0).strip())
+    return sorted(hits)[:5]
 
 
 def detect_signals(text: str) -> dict:
@@ -483,9 +528,34 @@ def _num(raw: str) -> float | None:
 
 
 def _annualize(value: float, hit: str, mult: float) -> int:
-    if re.search(r"k\s*$", hit.strip(), re.I):
+    factor = _period_factor(hit)
+    # strip the pay-period marker before checking for a trailing "k"
+    core = _TRAILING_PERIOD.sub("", hit)
+    if re.search(r"k\s*$", core.strip(), re.I):
         value *= 1000
-    return int(value * mult)
+    return int(value * factor * mult)
+
+
+# Annual multipliers per pay period (JobSpy enforce_annual_salary style):
+# 40h weeks for hourly, 5d x 52w for daily. Longer words first so
+# "daily" is not misread as a failed "day".
+_PERIOD_FACTORS = (
+    ("hourly", 2080), ("hour", 2080), ("hr", 2080),
+    ("daily", 260), ("day", 260),
+    ("weekly", 52), ("week", 52), ("wk", 52),
+    ("monthly", 12), ("month", 12), ("mo", 12),
+)
+
+
+def _period_factor(hit: str) -> int:
+    """Annual multiplier for a pay-period marker; 1 when absent or annual
+    ("per year", "per annum", "LPA")."""
+    m = _TRAILING_PERIOD.search(hit)
+    marker = m.group(0).lower() if m else ""
+    for keyword, factor in _PERIOD_FACTORS:
+        if re.search(r"(?<![a-z])" + keyword + r"(?![a-z])", marker):
+            return factor
+    return 1
 
 
 def normalize_salary(hits: list[str]) -> list[dict]:
@@ -493,7 +563,10 @@ def normalize_salary(hits: list[str]) -> list[dict]:
 
     Returns [{raw, currency, min_annual, max_annual}]. A trailing 'k'
     multiplies by 1000; ranges like '50k-70k' or '18-22 LPA' split into
-    min/max. Unparseable hits are skipped.
+    min/max. Pay-period markers annualize the figure ("$50/hr" -> 104000
+    USD, "€500/day" -> 130000 EUR, "$2,000/wk" -> 104000 USD,
+    "₹80,000 per month" -> 960000 INR); unmarked figures keep the
+    existing annual assumption. Unparseable hits are skipped.
     """
     out = []
     for hit in hits:

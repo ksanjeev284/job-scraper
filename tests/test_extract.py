@@ -157,3 +157,55 @@ def test_normalize_salary_cases():
     assert (eur["currency"], eur["min_annual"],
             eur["max_annual"]) == ("EUR", 70000, 90000)
     assert normalize_salary(["no salary here"]) == []
+
+
+def test_normalize_salary_pay_periods():
+    """Pay-period markers annualize the figure (JobSpy-style)."""
+    from jobscraper.extract import normalize_salary
+
+    def annual(hit):
+        figs = normalize_salary([hit])
+        assert len(figs) == 1, hit
+        return figs[0]
+
+    # hourly: 40h x 52w
+    assert annual("$50/hr")["min_annual"] == 50 * 2080
+    assert annual("$45 per hour")["min_annual"] == 45 * 2080
+    assert annual("$45 hourly")["min_annual"] == 45 * 2080
+    # daily: 5d x 52w
+    assert annual("€500/day")["min_annual"] == 500 * 260
+    assert annual("€500 daily")["min_annual"] == 500 * 260
+    # weekly x 52
+    assert annual("$2,000/wk")["min_annual"] == 2000 * 52
+    assert annual("$2,000 per week")["max_annual"] == 2000 * 52
+    # monthly x 12
+    assert annual("₹80,000 per month")["min_annual"] == 80000 * 12
+    gbp = annual("£4,000/mo")
+    assert (gbp["currency"], gbp["min_annual"]) == ("GBP", 4000 * 12)
+    # annual markers and unmarked figures keep the annual assumption
+    assert annual("$120k per year")["min_annual"] == 120000
+    assert annual("$60k/yr")["min_annual"] == 60000
+    assert annual("€75,000 per annum")["min_annual"] == 75000
+    assert annual("$120k")["min_annual"] == 120000
+    assert annual("18 LPA")["min_annual"] == 1800000
+    # ranges carry the period across both ends
+    rng = annual("$50-60/hr")
+    assert (rng["min_annual"], rng["max_annual"]) == (50 * 2080, 60 * 2080)
+    rng = annual("₹80,000-₹90,000 per month")
+    assert (rng["min_annual"], rng["max_annual"]) == (80000 * 12, 90000 * 12)
+
+
+def test_extract_salary_pay_period_markers():
+    """extract_salary keeps adjacent pay-period markers on the hit."""
+    hits = extract_salary("Compensation: $50/hr, paid weekly.")
+    assert "$50/hr" in hits
+    hits = extract_salary("Salary: €75,000 per year plus bonus")
+    assert "€75,000 per year" in hits
+    hits = extract_salary("Pay: ₹80,000 per month")
+    assert "₹80,000 per month" in hits
+    hits = extract_salary("Rate: £400/day outside IR35")
+    assert "£400/day" in hits
+    # short figures only count with a marker attached
+    assert extract_salary("just $50 lying around") == []
+    # no marker when none present; no duplicate whitespace variants
+    assert extract_salary("Salary $120k base") == ["$120k"]

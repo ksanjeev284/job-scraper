@@ -207,6 +207,14 @@ range *top* reaches the amount; `--max-salary` keeps postings whose range
 always kept: a missing salary is reported as unknown, never treated as
 proof the pay is too low or too high.
 
+Figures quoted with a pay period are annualized before any comparison
+(JobSpy-style): `$50/hr` becomes 104,000 USD, `€500/day` 130,000 EUR,
+`$2,000/wk` 104,000 USD, `₹80,000 per month` 960,000 INR — hourly x2080
+(40h weeks), daily x260, weekly x52, monthly x12. `per year` / `per
+annum` / `LPA` and unmarked figures keep the existing annual
+assumption, so `--min-salary` / `--max-salary` compare like with like
+across boards.
+
 ### Posting freshness filter
 
 `--max-age DAYS` keeps only postings posted within the last N days —
