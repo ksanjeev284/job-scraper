@@ -19,7 +19,7 @@ def _fake_pipeline(urls, **kwargs):
         posts.append(post)
         if cb:
             cb(i + 1, len(urls))
-    return posts, 0
+    return posts, 0, []
 
 
 def test_index_serves_gui():

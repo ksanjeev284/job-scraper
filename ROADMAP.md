@@ -9,12 +9,15 @@ Planned improvements, in rough priority order.
 - [x] Rippling (`api.rippling.com/.../board/{slug}/jobs`)
 - [x] Full-board discovery: enumerate all open postings from a company career page (`--discover`)
 - [x] LinkedIn guest job-search API (no login)
+- [ ] Remote-only boards (RemoteOK, Remotive, WeWorkRemotely, Working Nomads — JobSpy-style remote presets)
+- [ ] Curated seed registry of verified company boards for `--discover` sweeps
 
 ## Extraction
 - [x] Structured benefits extraction (health, PTO, bonus, equity)
 - [x] Posting-age parsing for relative dates ("2 days ago", "3 weeks ago")
 - [x] Structured salary normalization (INR LPA, EUR/USD/GBP ranges)
 - [x] Watch mode: flag new postings since last run
+- [x] Watch mode: detect closed/removed postings since last run (recorded with `closed_since`; fetch errors are never treated as closures, reappearing postings are reopened)
 - [x] Company and title-keyword exclusions
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [ ] Fixture-based regression tests (live posting, closed ATS API posting, SPA shell with embedded JSON, block page, duplicates, malformed responses)

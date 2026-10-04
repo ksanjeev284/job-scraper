@@ -95,11 +95,12 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  min_score: int | None = None,
                  watch_path: str | None = None,
                  progress_cb=None) -> tuple[list[Posting], int]:
-    """Scrape every URL and return (postings, new_count).
+    """Scrape every URL and return (postings, new_count, closed).
 
     ``progress_cb(done, total)`` is called as each URL finishes, so web
     UIs and CLIs can show progress. ``new_count`` is nonzero only in
-    watch mode (postings never seen before).
+    watch mode (postings never seen before); ``closed`` lists postings
+    seen before that disappeared this run.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -130,10 +131,10 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     if min_score is not None:
         results = [p for p in results
                    if p.error or (p.match and p.match.total >= min_score)]
-    new_count = 0
+    new_count, closed = 0, []
     if watch_path:
-        results, new_count = apply_watch(results, watch_path)
-    return results, new_count
+        results, new_count, closed = apply_watch(results, watch_path)
+    return results, new_count, closed
 
 
 def _split_csv(value: str | None) -> list[str]:
@@ -176,11 +177,19 @@ def apply_filters(posts: list[Posting],
 
 
 def apply_watch(posts: list[Posting],
-                state_path: str) -> tuple[list[Posting], int]:
-    """Flag postings never seen before; persist seen keys to ``state_path``.
+                state_path: str) -> tuple[list[Posting], int, list[dict]]:
+    """Flag postings never seen before and detect closed ones.
 
-    Returns (posts, new_count). The state file maps dedupe keys to the
-    first-seen date; it is created on first use.
+    The state file maps dedupe keys to ``{"url", "title", "first_seen"}``
+    (plus ``closed_since`` once closed); it is created on first use.
+    Postings seen in an earlier run but absent now are recorded as
+    closed with today's date, except postings that errored this run
+    (a transient fetch failure is not a closed posting). A closed
+    posting that reappears is reopened by dropping ``closed_since``.
+
+    Returns (posts, new_count, closed) where ``closed`` lists the
+    postings newly closed this run as dicts with ``url``, ``title``,
+    ``first_seen`` and ``closed_since``.
     """
     import json
     from datetime import date
@@ -191,21 +200,37 @@ def apply_watch(posts: list[Posting],
         seen = {}
     today = date.today().isoformat()
     new_count = 0
+    current: set[str] = set()
+    errored: set[str] = set()
     for post in posts:
-        if post.error:
-            continue
         key = "|".join(dedupe_key(post))
+        if post.error:
+            errored.add(key)
+            continue
+        current.add(key)
         if key not in seen:
             post.is_new = True
             new_count += 1
             seen[key] = {"url": post.url, "title": post.title,
                          "first_seen": today}
+        elif seen[key].get("closed_since"):
+            # Reopened: the posting is back on the board.
+            del seen[key]["closed_since"]
+    closed: list[dict] = []
+    for key, entry in seen.items():
+        if (key not in current and key not in errored
+                and not entry.get("closed_since")):
+            entry["closed_since"] = today
+            closed.append({"url": entry.get("url"),
+                           "title": entry.get("title"),
+                           "first_seen": entry.get("first_seen"),
+                           "closed_since": today})
     try:
         with open(state_path, "w", encoding="utf-8") as fh:
             json.dump(seen, fh, indent=2, ensure_ascii=False)
     except OSError:
         pass
-    return posts, new_count
+    return posts, new_count, closed
 
 
 def process_url(url: str, use_cache: bool = True,

@@ -151,6 +151,11 @@ jobscraper --urls urls.txt \
 jobscraper --urls urls.txt --watch state.json --webhook-only-new \
   --webhook-url https://discord.com/api/webhooks/123/secret \
   --webhook-mode discord --webhook-top 10
+
+# Watch mode also tracks closures: postings seen in a previous run that
+# disappear are reported as "closed since last run" (fetch errors are
+# never treated as closures; a posting that reappears is reopened).
+jobscraper --urls urls.txt --watch state.json
 ```
 
 - `--webhook-mode plain` (default) sends the full JSON payload:

@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{done}/{total}]", flush=True)
 
     before = len(urls)
-    results, new_count = run_pipeline(
+    results, new_count, closed = run_pipeline(
         urls, profile=profile, tracker_path=args.tracker,
         no_score=args.no_score, use_cache=not args.no_cache,
         workers=args.workers, no_dedupe=args.no_dedupe,
@@ -223,6 +223,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Filtered {before - after} posting(s) out")
     if args.watch:
         print(f"{new_count} new posting(s) since last run")
+        if closed:
+            print(f"{len(closed)} closed since last run:")
+            for entry in closed:
+                title = entry.get("title") or "(untitled)"
+                print(f"  - {title} ({entry.get('url')})")
 
     with open(out, "w", encoding="utf-8") as fh:
         json.dump([p.to_dict() for p in results], fh, indent=2,

@@ -123,7 +123,7 @@ def _run_job(job_id: str, urls: list[str], req: ScrapeRequest) -> None:
             _JOBS[job_id]["total"] = total
 
     try:
-        results, new_count = run_pipeline(
+        results, new_count, closed = run_pipeline(
             urls, profile=profile, workers=req.workers,
             location_filter=req.location_filter,
             keyword_filter=req.keyword_filter,
@@ -134,7 +134,8 @@ def _run_job(job_id: str, urls: list[str], req: ScrapeRequest) -> None:
         payload = [p.to_dict() for p in results]
         with _JOBS_LOCK:
             _JOBS[job_id].update(status="done", results=payload,
-                                 profile=profile, new_count=new_count)
+                                 profile=profile, new_count=new_count,
+                                 closed=closed)
     except Exception as exc:
         with _JOBS_LOCK:
             _JOBS[job_id].update(status="error", error=str(exc)[:500])
@@ -168,7 +169,9 @@ def job_status(job_id: str):
             raise HTTPException(status_code=404, detail="unknown job")
         if job["status"] == "done":
             return {"status": "done", "done": job["done"],
-                    "total": job["total"], "results": job["results"]}
+                    "total": job["total"], "results": job["results"],
+                    "new_count": job.get("new_count", 0),
+                    "closed": job.get("closed", [])}
         return {"status": job["status"], "done": job["done"],
                 "total": job["total"], "error": job["error"]}
 

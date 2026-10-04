@@ -101,9 +101,57 @@ def test_apply_watch_flags_new(tmp_path):
     from jobscraper.pipeline import apply_watch
     state = str(tmp_path / "watch.json")
     a = _post("Acme", "Engineer")
-    posts, new_count = apply_watch([a], state)
-    assert new_count == 1 and a.is_new
+    posts, new_count, closed = apply_watch([a], state)
+    assert new_count == 1 and a.is_new and closed == []
     b = _post("Acme", "Engineer")
     c = _post("Globex", "Analyst")
-    posts, new_count = apply_watch([b, c], state)
-    assert new_count == 1 and not b.is_new and c.is_new
+    posts, new_count, closed = apply_watch([b, c], state)
+    assert new_count == 1 and not b.is_new and c.is_new and closed == []
+
+
+def test_apply_watch_detects_closed(tmp_path):
+    import json
+    from datetime import date
+
+    from jobscraper.pipeline import apply_watch
+    state = str(tmp_path / "watch.json")
+    a = _post("Acme", "Engineer")
+    b = _post("Globex", "Analyst")
+    apply_watch([a, b], state)
+    today = date.today().isoformat()
+    # b disappears from the next run -> reported closed once.
+    posts, new_count, closed = apply_watch([a], state)
+    assert new_count == 0
+    assert len(closed) == 1
+    assert closed[0]["title"] == "Analyst"
+    assert closed[0]["closed_since"] == today
+    assert "first_seen" in closed[0]
+    # A third run reports nothing new: already-closed stays closed.
+    posts, new_count, closed = apply_watch([a], state)
+    assert new_count == 0 and closed == []
+    persisted = json.loads(open(state, encoding="utf-8").read())
+    assert any(e.get("closed_since") == today for e in persisted.values())
+
+
+def test_apply_watch_errored_not_closed(tmp_path):
+    from jobscraper.pipeline import apply_watch
+    state = str(tmp_path / "watch.json")
+    a = _post("Acme", "Engineer")
+    b = _post("Globex", "Analyst")
+    apply_watch([a, b], state)
+    # b now fails to fetch: transient error, must not be marked closed.
+    b2 = _post("Globex", "Analyst")
+    b2.error = "timeout"
+    posts, new_count, closed = apply_watch([a, b2], state)
+    assert new_count == 0 and closed == []
+
+
+def test_apply_watch_reopened(tmp_path):
+    from jobscraper.pipeline import apply_watch
+    state = str(tmp_path / "watch.json")
+    a = _post("Acme", "Engineer")
+    b = _post("Globex", "Analyst")
+    apply_watch([a, b], state)
+    apply_watch([a], state)  # b closes
+    posts, new_count, closed = apply_watch([a, b], state)
+    assert new_count == 0 and closed == []  # b reopened, not new/closed
