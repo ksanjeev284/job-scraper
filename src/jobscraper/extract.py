@@ -23,19 +23,77 @@ REQ_HEADINGS = re.compile(
     r"background|skills|experience)|ideal candidate|who you are|about you|"
     r"key skills|technical skills|preferred|nice to have|bonus points|"
     r"desirable|essential|criteria|eligibility|what we.?re looking for|"
-    r"we are looking for)",
+    r"we are looking for|"
+    # German
+    r"anforderung|anforderungsprofil|dein profil|ihr profil|"
+    r"was du mitbringst|was sie mitbringen|das bringst du mit|"
+    r"das erwartet dich|deine kenntnisse|ihre kenntnisse|wunschprofil|"
+    r"gew[üu]nschte (qualifikation|f[äa]higkeiten)|"
+    # French
+    r"profil recherch[ée]|profil souhait[ée]|votre profil|"
+    r"ce que nous recherchons|vos comp[ée]tences|"
+    r"qualifications requises|"
+    # Spanish
+    r"requisitos|perfil del candidato|lo que buscamos|"
+    r"habilidades requeridas|tu perfil|"
+    # Dutch
+    r"jouw profiel|uw profiel|functie.?eisen|wat breng je mee|"
+    r"wat verwachten we|"
+    # Italian
+    r"requisiti|il tuo profilo|cosa cerchiamo)",
     re.I)
 
-NICE_HEADINGS = re.compile(r"(nice to have|preferred|bonus|desirable|plus)",
-                           re.I)
+NICE_HEADINGS = re.compile(
+    r"(nice to have|preferred|bonus|desirable|plus|"
+    # German
+    r"von vorteil|w[üu]nschenswert|pluspunkte|idealerweise|"
+    # French
+    r"serait un plus|atouts?|appr[ée]ci[ée]e?s?|"
+    # Spanish
+    r"se valorar[áa]|deseable|ser[áa] un plus|"
+    # Dutch
+    r"een pluspunt|wenselijk|"
+    # Italian
+    r"sar[àa] un plus|preferibile|titolo preferenziale)",
+    re.I)
 
 RESP_HEADINGS = re.compile(
     r"(your mission|the role|about the role|responsabilit|what you.?ll do|"
-    r"key duties|day to day|what you will own|the opportunity)", re.I)
+    r"key duties|day to day|what you will own|the opportunity|"
+    # German
+    r"deine aufgaben|ihre aufgaben|aufgabenbereich|deine mission|"
+    r"ihre mission|deine verantwortung|ihre verantwortung|"
+    r"t[äa]tigkeitsbereich|was dich erwartet|was sie erwartet|"
+    # French
+    r"vos missions|tes missions|missions|vos responsabilit[ée]s|"
+    r"tes responsabilit[ée]s|ce que vous ferez|votre r[ôo]le|"
+    # Spanish
+    r"tus funciones|sus funciones|funciones y responsabilidades|"
+    r"responsabilidades|tu misi[óo]n|"
+    # Dutch
+    r"jouw taken|uw taken|je werkzaamheden|verantwoordelijkheden|de functie|"
+    # Italian
+    r"le tue attivit[àa]|attivit[àa] principali|responsabilit[àa]|"
+    r"la posizione)",
+    re.I)
 
 BENEFITS_HEADINGS = re.compile(
     r"(benefit|perks|what we offer|why (join|work)|life at|compensation"
-    r"|rewards|what.?s in it for you|employee (benefits|perks))", re.I)
+    r"|rewards|what.?s in it for you|employee (benefits|perks)|"
+    # German
+    r"wir bieten|das bieten wir|deine vorteile|ihre vorteile|vorteile|"
+    r"gute gr[üu]nde f[üu]r uns|leistungen|"
+    # French
+    r"ce que nous offrons|avantages|vos avantages|"
+    r"pourquoi nous rejoindre|nos avantages|"
+    # Spanish
+    r"lo que ofrecemos|beneficios|ventajas|por qu[ée] nosotros|"
+    r"te ofrecemos|"
+    # Dutch
+    r"wat wij bieden|voordelen|jouw voordelen|waarom bij ons|"
+    # Italian
+    r"cosa offriamo|benefici|vantaggi|perch[ée] noi)",
+    re.I)
 
 SKILL_VOCAB = [
     "Splunk", "Splunk ES", "Splunk SOAR", "SIEM", "SOC", "SOAR",
@@ -55,6 +113,19 @@ SKILL_VOCAB = [
     "CISSP", "CISM", "CEH", "Security+", "GSEC", "GCIA", "GCIH",
     "Splunk Certified", "SC-200", "AZ-500",
 ]
+
+# Hints that a long unheaded paragraph is probably a requirements block.
+# Multilingual: English, German, French, Spanish, Dutch, Italian.
+OTHER_HINTS = re.compile(
+    r"(year|experience|skill|certif|degree|bachelor|master|"
+    r"jahre?|erfahrung|kenntnisse|f[äa]higkeiten|abschluss|studiengang|"
+    r"zertifikat|"
+    r"exp[ée]rience|comp[ée]tences|dipl[ôo]me|"
+    r"experiencia|conocimientos|t[íi]tulo|"
+    r"ervaring|kennis|opleiding|"
+    r"esperienza|competenze|laurea)",
+    re.I)
+
 
 EXP_RE = re.compile(
     r"(\d+)\s*(?:\+)?\s*(?:to|-)?\s*(?:\d+\s*)?(?:years?|yrs?)\s+(?:of\s+)?"
@@ -160,13 +231,15 @@ def extract_requirements(
     for sec in sections:
         if not sec.text.strip():
             continue
-        if REQ_HEADINGS.search(sec.heading):
-            (nice if NICE_HEADINGS.search(sec.heading) else req).append(sec)
+        # Nice-to-have is checked first: non-English "nice" headings (e.g.
+        # "Von Vorteil") do not necessarily match the requirements regex.
+        if NICE_HEADINGS.search(sec.heading):
+            nice.append(sec)
+        elif REQ_HEADINGS.search(sec.heading):
+            req.append(sec)
         elif RESP_HEADINGS.search(sec.heading):
             resp.append(sec)
-        elif len(sec.text) > 400 and re.search(
-                r"(year|experience|skill|certif|degree|bachelor|master)",
-                sec.text, re.I):
+        elif len(sec.text) > 400 and OTHER_HINTS.search(sec.text):
             other.append(sec)
     return req, nice, resp, other
 

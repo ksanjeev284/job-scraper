@@ -21,7 +21,7 @@ Planned improvements, in rough priority order.
 - [x] Company and title-keyword exclusions
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [x] Fixture-based regression tests (frozen Lever/Ashby/Greenhouse API payloads, SPA shell with embedded JSON, Next.js shell, JSON-LD page, closed posting, block page, duplicates, malformed responses — `tests/fixtures/`, `tests/test_fixtures.py`)
-- [ ] Better heading detection for non-English postings
+- [x] Better heading detection for non-English postings (DE/FR/ES/NL/IT section headings + multilingual requirements-hint fallback)
 
 ## Scoring
 - [x] Profile schema validation with helpful errors
