@@ -28,6 +28,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **RSS feed export** — `--rss feed.xml` writes the ranked results as an RSS 2.0 feed for feed readers: match scores in item titles, fit summaries in the bodies, posting-age `pubDate`, watch-mode newcomers tagged `new`
 - **JSONL export** — `--jsonl results.jsonl` writes one full posting record per line, ranked best-first: streams through `jq` and `grep`, appends cleanly across runs (`>>`)
 - **SQLite export** — `--sqlite jobs.db` upserts the ranked results by canonical URL (no new dependencies): `first_seen` keeps the original timestamp, `last_seen` advances and `scrape_count` increments on every re-run, so the database becomes a queryable history across runs (`SELECT title, company, score FROM postings WHERE live = 1 ORDER BY score DESC`); list fields stored as JSON text, full record in `raw_json`
+- **Application status tracking** — record what happened after a posting was found: `--mark-applied URL [--application-status interviewing] [--application-notes "..."]` stores a funnel status (applied / interviewing / offer / rejected / withdrawn) in a local SQLite database (default `~/.jobscraper/applications.db`, or the `--sqlite` database when one is given). `--list-applications [--application-status all]` and `--applications-stats` report the pipeline; scrape runs annotate matching postings so JSON/CSV/HTML/Excel all carry an "applied" column
 - **Source run-summary** — every run prints a per-board table (attempted / ok / errored / filtered, plus a `ok` / `partial` / `failed` / `empty` status and the top error messages) so a blocked or broken board can never silently vanish; programmatic access via `run_pipeline(..., run_stats=True)`
 - **Webhook notifications / export hooks** — `--webhook-url URL` POSTs the ranked results after each run: `plain` JSON for custom receivers, or `slack` / `discord` chat notifications; `--webhook-mode pushover` / `--webhook-mode telegram` send a phone alert, `--webhook-mode email` sends an SMTP digest to your inbox instead (see below)
 
@@ -84,6 +85,16 @@ jobscraper --linkedin "data analyst" --location "Mumbai, India" \
   --profile examples/data-analyst.json --location-filter mumbai
 ```
 
+# Application pipeline: record where you applied, move postings
+# through the funnel, review it later
+jobscraper --mark-applied "https://boards.greenhouse.io/acme/jobs/123" \
+  --application-notes "referred by hiring manager"
+jobscraper --mark-applied "https://boards.greenhouse.io/acme/jobs/123" \
+  --application-status interviewing
+jobscraper --list-applications --application-status all
+jobscraper --applications-stats
+```
+
 Outputs: `results.json` (full structured data), `report.md` (ranked summary + per-posting detail), `scores.csv` (spreadsheet), `report.html` (self-contained ranked HTML report with score breakdowns, inline CSS, no external assets; every scraped field is HTML-escaped so the report is safe to open in a browser), `feed.xml` (RSS 2.0 feed of the ranked results for feed readers), `results.jsonl` (one full posting record per line, ranked best-first, for `jq` pipelines), `jobs.db` (SQLite: ranked postings upserted by URL, a queryable history across runs).
 
 ### Candidate profile
@@ -121,6 +132,12 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--rss PATH` | RSS 2.0 feed export path |
 | `--jsonl PATH` | JSON Lines export path: one full posting record per line, ranked by match score |
 | `--sqlite PATH` | SQLite database path: ranked postings upserted by URL, a queryable history across runs |
+| `--mark-applied URL` | Record an application for a posting URL (repeatable; re-marking updates its status) |
+| `--application-status STATUS` | Status to record with `--mark-applied` (applied/interviewing/offer/rejected/withdrawn), or filter for `--list-applications` (`all` lists every status) |
+| `--application-notes TEXT` | Notes to attach when marking an application (appended on re-mark) |
+| `--applications-db PATH` | Applications database path (default: the `--sqlite` path, else `~/.jobscraper/applications.db`) |
+| `--list-applications` | List tracked applications, newest first |
+| `--applications-stats` | Print application counts per status |
 | `--profile PATH` | candidate profile JSON for scoring |
 | `--no-score` | skip match scoring |
 | `--tracker PATH` | tracker file: postings whose URL appears are marked `applied` |

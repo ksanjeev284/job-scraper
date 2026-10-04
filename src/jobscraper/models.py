@@ -108,6 +108,7 @@ class Posting:
     sections: list[Section] = field(default_factory=list)
     full_text_chars: int = 0
     tracker_status: str | None = None
+    application_status: str | None = None
     match: MatchResult | None = None
     error: str | None = None
 

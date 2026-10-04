@@ -131,7 +131,7 @@ def _spreadsheet_headers() -> list[str]:
     return ["score", "live", "age_days", "title", "company", "location",
             "type", "seniority", "exp_years", "salary", "matched_skills",
             "skill_gaps", "fit_summary", "benefits", "sponsorship",
-            "german_required", "work_mode", "tracker", "url"]
+            "german_required", "work_mode", "tracker", "applied", "url"]
 
 
 def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
@@ -158,6 +158,7 @@ def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
         "yes" if post.signals.get("german_required") else "",
         ",".join(post.signals.get("work_mode") or []),
         post.tracker_status or "",
+        post.application_status or "",
         post.url,
     ]
 
@@ -326,7 +327,8 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
         parts.append("<h2>Ranked by match score</h2>")
         parts.append("<table class=\"rank\"><tr><th>Score</th><th>Live</th>"
                      "<th>Age</th><th>Title</th><th>Company</th>"
-                     "<th>Location</th><th>Level</th><th>Gaps</th></tr>")
+                     "<th>Location</th><th>Level</th><th>Applied</th>"
+                     "<th>Gaps</th></tr>")
         for idx, post in enumerate(ranked):
             match = post.match
             assert match is not None
@@ -342,6 +344,7 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
                 f"<td><a href=\"#p{idx}\">{_esc(post.title)}</a>{new}</td>"
                 f"<td>{_esc(post.company)}</td><td>{_esc(post.location)}</td>"
                 f"<td>{_esc(post.seniority or '?')}</td>"
+                f"<td>{_esc(post.application_status or '-')}</td>"
                 f"<td>{gaps}</td></tr>")
         parts.append("</table>")
     else:

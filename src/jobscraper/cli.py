@@ -37,6 +37,34 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Skip match scoring")
     parser.add_argument("--tracker", default=None,
                         help="Path to a tracker file for applied-dedupe")
+    app_group = parser.add_argument_group(
+        "Application tracking",
+        "Record what happened after a posting was found: applied, "
+        "interviewing, offer, rejected, withdrawn. Stored in a local "
+        "SQLite database (default ~/.jobscraper/applications.db, or the "
+        "--sqlite database when one is given).")
+    app_group.add_argument("--mark-applied", dest="mark_applied",
+                           action="append", default=None, metavar="URL",
+                           help="Record an application for a posting URL "
+                                "(repeatable); re-marking an existing URL "
+                                "updates its status")
+    app_group.add_argument("--application-status", default="applied",
+                           help="Status to record with --mark-applied, or "
+                                "to filter by with --list-applications "
+                                "('all' lists every status; default: "
+                                "applied)")
+    app_group.add_argument("--application-notes", default=None,
+                           help="Notes to attach when marking an "
+                                "application (appended on re-mark)")
+    app_group.add_argument("--applications-db", default=None,
+                           help="Applications database path (default: the "
+                                "--sqlite path, else "
+                                "~/.jobscraper/applications.db)")
+    app_group.add_argument("--list-applications", action="store_true",
+                           help="List tracked applications (optionally "
+                                "filtered by --application-status)")
+    app_group.add_argument("--applications-stats", action="store_true",
+                           help="Print application counts per status")
     parser.add_argument("--csv", default=None, help="CSV export path")
     parser.add_argument("--html", default=None, help="HTML report path")
     parser.add_argument("--excel", default=None,
@@ -222,6 +250,69 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _applications_db_path(args: argparse.Namespace) -> str:
+    """Where the applications database lives for this invocation."""
+    from jobscraper.applications import DEFAULT_DB
+    if args.applications_db:
+        return args.applications_db
+    if getattr(args, "sqlite", None):
+        return args.sqlite
+    return DEFAULT_DB
+
+
+def _run_application_tracker(args: argparse.Namespace) -> int:
+    """Handle --mark-applied / --list-applications / --applications-stats."""
+    from jobscraper.applications import (
+        VALID_STATUSES,
+        application_summary,
+        connect,
+        enrich_from_postings,
+        list_applications,
+        mark_applied,
+    )
+    path = _applications_db_path(args)
+    conn = connect(path)
+    try:
+        if args.mark_applied:
+            if args.application_status not in VALID_STATUSES:
+                print(f"error: --application-status must be one of "
+                      f"{', '.join(VALID_STATUSES)}", file=sys.stderr)
+                return 2
+            for url in args.mark_applied:
+                details = enrich_from_postings(conn, url)
+                app = mark_applied(
+                    conn, url, status=args.application_status,
+                    notes=args.application_notes, **details)
+                title = app.title or "(untitled)"
+                print(f"{app.status:<12}{title[:52]:<54}{app.url}")
+            print(f"\nTracked in {path}")
+        if args.applications_stats or args.list_applications:
+            summary = application_summary(conn)
+            total = sum(summary.values())
+            if args.applications_stats:
+                print(f"Applications tracked in {path}: {total}")
+                for status in VALID_STATUSES:
+                    print(f"  {status:<12}{summary[status]}")
+            if args.list_applications:
+                wanted = args.application_status
+                if wanted != "all" and wanted not in VALID_STATUSES:
+                    print(f"error: --application-status must be 'all' or "
+                          f"one of {', '.join(VALID_STATUSES)}",
+                          file=sys.stderr)
+                    return 2
+                apps = list_applications(
+                    conn, None if wanted == "all" else wanted)
+                print(f"{'STATUS':<12}{'TITLE':<54}URL")
+                for app in apps:
+                    print(f"{app.status:<12}"
+                          f"{(app.title or '(untitled)')[:52]:<54}"
+                          f"{app.url}")
+                print(f"\n{len(apps)} application(s)")
+    finally:
+        conn.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -241,6 +332,10 @@ def main(argv: list[str] | None = None) -> int:
         print("Sweep a category: "
               "jobscraper --discover-seeds CATEGORY --keyword-filter X")
         return 0
+
+    if (args.mark_applied or args.list_applications
+            or args.applications_stats):
+        return _run_application_tracker(args)
 
     from jobscraper.http import configure_proxies, load_proxies_file, proxies_from_env
     proxy_specs = list(args.proxy)
@@ -403,6 +498,23 @@ def main(argv: list[str] | None = None) -> int:
             for entry in closed:
                 title = entry.get("title") or "(untitled)"
                 print(f"  - {title} ({entry.get('url')})")
+
+    # Annotate results with any tracked application status before the
+    # exports are written, so JSON/CSV/HTML/Excel all carry it.
+    from jobscraper.applications import connect, get_application
+    conn = connect(_applications_db_path(args))
+    try:
+        tracked = 0
+        for post in results:
+            app = get_application(conn, post.url)
+            if app is not None:
+                post.application_status = app.status
+                tracked += 1
+        if tracked:
+            print(f"Applications: {tracked} of {len(results)} posting(s) "
+                  f"already tracked")
+    finally:
+        conn.close()
 
     with open(out, "w", encoding="utf-8") as fh:
         json.dump([p.to_dict() for p in results], fh, indent=2,
