@@ -15,6 +15,13 @@ from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
 from jobscraper.boards import BOARD_FETCHERS, board_name_for_url
+from jobscraper.dedupe import (
+    fuzzy_dedupe_from_env,
+    fuzzy_dedupe_results,
+    fuzzy_threshold_from_env,
+    normalize_company,
+    normalize_title,
+)
 from jobscraper.extract import (
     MIN_CONTENT_CHARS,
     check_liveness,
@@ -75,15 +82,7 @@ def check_tracker(post: Posting, tracker_path: str | None) -> str | None:
 
 def dedupe_key(post: Posting) -> tuple[str, str]:
     """Normalize (company, title) so the same job on two boards dedupes."""
-
-    def norm(text: str | None) -> str:
-        text = re.sub(r"[^a-z0-9 ]", " ", (text or "").lower())
-        return re.sub(r"\s+", " ", text).strip()
-
-    title = norm(post.title)
-    title = re.sub(r"\b(senior|sr|junior|jr|lead|staff|principal|i{1,3}|iv)\b",
-                   "", title)
-    return norm(post.company), re.sub(r"\s+", " ", title).strip()
+    return normalize_company(post.company), normalize_title(post.title)
 
 
 def dedupe_results(posts: list[Posting]) -> list[Posting]:
@@ -110,6 +109,7 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  tracker_path: str | None = None,
                  no_score: bool = False, use_cache: bool = True,
                  workers: int = 4, no_dedupe: bool = False,
+                 fuzzy_dedupe: bool = False,
                  location_filter: str | None = None,
                  keyword_filter: str | None = None,
                  exclude_companies: str | None = None,
@@ -137,7 +137,12 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     alive per worker thread for the whole run instead of launching a
     fresh browser per posting; requires the ``browser`` extra.
     ``max_age`` (days) keeps only postings posted within the last N days;
-    postings with an unknown age are kept. ``run_stats`` also collects
+    postings with an unknown age are kept. ``fuzzy_dedupe`` (also
+    ``JOBSCRAPER_FUZZY_DEDUPE=1``) additionally merges near-duplicate
+    postings from the same employer with near-identical titles
+    (``JOBSCRAPER_FUZZY_THRESHOLD`` tunes the similarity floor, default
+    0.85); merged URLs are recorded in the kept posting's fetch notes.
+    ``run_stats`` also collects
     per-source run diagnostics (a failing board can never silently
     vanish) and appends them as a fourth return value: a list of
     :class:`~jobscraper.models.SourceStat`.
@@ -186,6 +191,9 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
 
     if not no_dedupe:
         results = dedupe_results(results)
+        if fuzzy_dedupe or fuzzy_dedupe_from_env():
+            results, _ = fuzzy_dedupe_results(
+                results, threshold=fuzzy_threshold_from_env())
     results = apply_filters(results, location_filter, keyword_filter,
                             exclude_companies, exclude_keywords,
                             seniority_filter=seniority,

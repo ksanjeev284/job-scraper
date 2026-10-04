@@ -86,6 +86,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-dedupe", action="store_true",
                         help="Keep cross-board duplicates instead of "
                              "dropping them")
+    parser.add_argument("--fuzzy-dedupe", action="store_true",
+                        help="Also merge near-duplicate postings: same "
+                             "employer with near-identical titles (e.g. "
+                             "\"Splunk Engineer (Nights)\" vs \"Splunk "
+                             "Engineer - Night Shift\"); keeps the "
+                             "highest-scored copy (also via "
+                             "JOBSCRAPER_FUZZY_DEDUPE=1, threshold via "
+                             "JOBSCRAPER_FUZZY_THRESHOLD)")
     parser.add_argument("--linkedin", default=None, metavar="KEYWORDS",
                         help="Search LinkedIn jobs for KEYWORDS and scrape "
                              "the results")
@@ -477,6 +485,7 @@ def main(argv: list[str] | None = None) -> int:
         urls, profile=profile, tracker_path=args.tracker,
         no_score=args.no_score, use_cache=not args.no_cache,
         workers=args.workers, no_dedupe=args.no_dedupe,
+        fuzzy_dedupe=args.fuzzy_dedupe,
         location_filter=args.location_filter,
         keyword_filter=args.keyword_filter,
         exclude_companies=args.exclude_companies,
@@ -491,6 +500,12 @@ def main(argv: list[str] | None = None) -> int:
     after = sum(1 for p in results if not p.error)
     if before - after:
         print(f"Filtered {before - after} posting(s) out")
+    merged = sum(1 for p in results
+                 if any(n.startswith("fuzzy-dedupe merged")
+                        for n in p.fetch_notes))
+    if merged:
+        print(f"Fuzzy-dedupe merged near-duplicates into {merged} "
+              f"posting(s)")
     if args.watch:
         print(f"{new_count} new posting(s) since last run")
         if closed:

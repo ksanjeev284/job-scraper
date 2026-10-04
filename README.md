@@ -21,7 +21,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Structured extraction** — splits descriptions into headed sections, buckets them into requirements / responsibilities / nice-to-haves, and detects skills, experience years, salary figures, sponsorship mentions, language requirements and work mode; section headings are recognized in English, German, French, Spanish, Dutch and Italian
 - **0-100 match scoring** — against a candidate profile JSON: technical skills (35), experience (25), seniority (15), certifications (10), location (5), role relevance (5), compensation (5); includes skill gaps and a fit/watch summary
 - **Seniority inference** — every posting gets an explicit level (`intern` / `entry` / `mid` / `senior` / `staff` / `lead` / `manager` / `director` / `executive` / `unknown`) with match evidence, from title markers first, then description signals, then required-experience bands; `--seniority senior,staff` filters runs by level, and the level shows in CSV/Excel/HTML exports
-- **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; skips URLs already marked applied in your tracker file
+- **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; `--fuzzy-dedupe` also merges same-employer postings with near-identical titles (e.g. "Splunk Engineer (Nights)" vs "Splunk Engineer - Night Shift") and records the merged URLs; skips URLs already marked applied in your tracker file
 - **URL canonicalization** — tracking parameters (`utm_*`, `trk`, `gclid`, …), fragments, host-case variants and trailing slashes are stripped before fetching, so the same posting shared from different sources is fetched once and reported under one clean URL; the applied-tracker check matches across those variants too
 - **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML, Excel, JSONL, RSS and SQLite outputs
 - **Excel export** — `--excel results.xlsx` writes the ranked spreadsheet: score-colored cells, frozen header with autofilter, clickable posting URLs, formula-injection neutralized (needs `pip install -e ".[excel]"`)
@@ -144,6 +144,7 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--workers N` | parallel fetch workers (default 4) |
 | `--no-cache` | ignore the local 24h page cache |
 | `--no-dedupe` | keep cross-board duplicates |
+| `--fuzzy-dedupe` | also merge near-duplicate postings: same employer with near-identical titles (token-set similarity, default floor 0.85; `JOBSCRAPER_FUZZY_DEDUPE=1` / `JOBSCRAPER_FUZZY_THRESHOLD`); keeps the highest-scored copy and records merged URLs on it |
 | `--respect-robots` | honor robots.txt for every fetched URL (also via the `JOBSCRAPER_RESPECT_ROBOTS` env var) |
 | `--proxy URL` | proxy URL for all requests (repeatable; rotated round-robin) |
 | `--proxies-file PATH` | text file with one proxy URL per line (`#` comments allowed) |
