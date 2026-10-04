@@ -289,6 +289,28 @@ def build_parser() -> argparse.ArgumentParser:
                              "launching a fresh browser per posting "
                              "(requires the 'browser' extra; also honored "
                              "via the JOBSCRAPER_BROWSER_POOL env var)")
+    profiles_group = parser.add_argument_group(
+        "search profiles",
+        "Named saved configurations: save a full invocation with "
+        "--save-search-profile NAME, rerun it later with --search-profile "
+        "NAME. Saved values act as defaults; any flag given on the "
+        "command line overrides the profile.")
+    profiles_group.add_argument(
+        "--search-profile", default=None, metavar="NAME",
+        help="Load a saved search profile as defaults for every option "
+             "(flags given on the command line still win)")
+    profiles_group.add_argument(
+        "--save-search-profile", default=None, metavar="NAME",
+        help="Save the current invocation's options as a named search "
+             "profile and exit (notification credentials are stored too; "
+             "the file is written with mode 0600)")
+    profiles_group.add_argument(
+        "--list-search-profiles", action="store_true",
+        help="List the names of all saved search profiles and exit")
+    profiles_group.add_argument(
+        "--search-profiles-file", default=None, metavar="PATH",
+        help="Use a different search-profiles JSON file "
+             "(or JOBSCRAPER_SEARCH_PROFILES)")
     return parser
 
 
@@ -355,8 +377,74 @@ def _run_application_tracker(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_search_profile_argv(argv: list[str] | None) -> tuple[str | None,
+                                                           str | None]:
+    """Extract --search-profile/--search-profiles-file before full parsing."""
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--search-profile", default=None)
+    pre.add_argument("--search-profiles-file", default=None)
+    known, _ = pre.parse_known_args(argv)
+    return known.search_profile, known.search_profiles_file
+
+
+def _apply_search_profile(parser: argparse.ArgumentParser,
+                          name: str, path: str | None) -> int | None:
+    """Load a saved profile and set its options as parser defaults.
+
+    Saved values act as defaults only: any flag actually given on the
+    command line still overrides the profile.  Unknown keys (e.g. from a
+    renamed option) are ignored with a warning.  Returns an exit code on
+    failure, else None.
+    """
+    from jobscraper.search_profiles import ProfileError, get_profile
+    try:
+        stored = get_profile(name, path)
+    except ProfileError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    valid_dests = {action.dest for action in parser._actions}
+    known = {key: value for key, value in stored.items()
+             if key in valid_dests}
+    unknown = sorted(set(stored) - set(known))
+    if unknown:
+        print(f"warning: search profile '{name}' has unrecognized "
+              f"options, ignored: {', '.join(unknown)}", file=sys.stderr)
+    parser.set_defaults(**known)
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    from jobscraper.search_profiles import (
+        ProfileError,
+        default_profiles_path,
+        list_profile_names,
+        save_search_profile,
+    )
+    parser = build_parser()
+    profile_name, profiles_file = _resolve_search_profile_argv(argv)
+    if profile_name:
+        exit_code = _apply_search_profile(parser, profile_name, profiles_file)
+        if exit_code is not None:
+            return exit_code
+    args = parser.parse_args(argv)
+
+    profiles_path = args.search_profiles_file or str(default_profiles_path())
+    if args.list_search_profiles:
+        for name in list_profile_names(profiles_path):
+            print(name)
+        return 0
+    if args.save_search_profile:
+        from jobscraper.search_profiles import sanitize_for_profile
+        try:
+            saved = save_search_profile(
+                args.save_search_profile, sanitize_for_profile(vars(args)),
+                profiles_path)
+        except ProfileError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"Saved search profile '{args.save_search_profile}' "
+              f"to {saved}")
+        return 0
 
     if args.list_seeds:
         from jobscraper.seeds import SeedError, categories, load_seeds

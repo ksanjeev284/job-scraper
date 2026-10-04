@@ -102,6 +102,36 @@ Outputs: `results.json` (full structured data), `report.md` (ranked summary + pe
 
 Pick the closest starting point in `examples/` (`security-engineer.json`, `software-engineer.json`, `data-analyst.json`) or start blank from `template.json`, copy it to `my-profile.json`, and fill in your skills, years of experience, certs, preferred locations, current CTC, role tiers (`tier1`/`tier2`/`tier3` keyword lists that define what counts as a strong role match for *your* field), and `custom_skills` (extra skill keywords the built-in vocabulary doesn't cover), `skill_aliases` (e.g. `"SIEM": ["Splunk ES", "QRadar"]` so a posting naming a specific tool counts toward the broader skill), and `weights` (rebalance the 35/25/15/10/5/5/5 scoring split, e.g. `"weights": {"technical_skills": 50, "experience": 30}`). Profiles are validated on load — a typo'd key or wrong type fails fast with a clear message instead of silently mis-scoring. Scoring runs against this profile; nothing personal ships with the repo. With no `--profile`, a neutral template is used.
 
+### Saved search profiles
+
+A search profile saves a full invocation — sources, filters, exports,
+notifications — under a name, so a repeatable search becomes one short
+command. Saved values act as *defaults*: any flag given on the command line
+still overrides the profile.
+
+```bash
+# save the current invocation as a profile
+jobscraper --linkedin "splunk engineer" --location "Hyderabad, India" \
+  --days 14 --limit 20 --min-score 60 --watch watch-state.json \
+  --webhook-mode ntfy --ntfy-topic my-jobs --save-search-profile nightly
+
+# rerun it any time
+jobscraper --search-profile nightly
+
+# same profile, but a one-off override (flags win over the profile)
+jobscraper --search-profile nightly --location "Mumbai, India"
+
+# see what's saved
+jobscraper --list-search-profiles
+```
+
+Profiles live in `~/.jobscraper/search_profiles.json` (override with
+`--search-profiles-file` or the `JOBSCRAPER_SEARCH_PROFILES` env var).
+Notification credentials are stored too when you passed them on the command
+line, so the file is written with mode `0600` and stays on your machine —
+it is never part of the repo. Not to be confused with `--profile`, which is
+the candidate profile used for match scoring.
+
 ### Options
 
 | Flag | Description |
@@ -152,6 +182,10 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--respect-robots` | honor robots.txt for every fetched URL (also via the `JOBSCRAPER_RESPECT_ROBOTS` env var) |
 | `--proxy URL` | proxy URL for all requests (repeatable; rotated round-robin) |
 | `--proxies-file PATH` | text file with one proxy URL per line (`#` comments allowed) |
+| `--search-profile NAME` | load a saved search profile as defaults (CLI flags still win) |
+| `--save-search-profile NAME` | save this invocation as a named search profile and exit |
+| `--list-search-profiles` | list saved search profiles and exit |
+| `--search-profiles-file PATH` | use a different search-profiles JSON file (or `JOBSCRAPER_SEARCH_PROFILES`) |
 
 ### Salary threshold filters
 
