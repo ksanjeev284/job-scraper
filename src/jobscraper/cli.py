@@ -74,6 +74,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-score", type=int, default=None, metavar="N",
                         help="Keep only postings scoring N or higher "
                              "(0-100), e.g. --min-score 65")
+    parser.add_argument("--exclude-companies", default=None, metavar="\"A,B\"",
+                        help="Drop postings from these companies "
+                             "(case-insensitive), e.g. "
+                             '--exclude-companies "tcs,infosys"')
+    parser.add_argument("--exclude-keywords", default=None, metavar="\"A,B\"",
+                        help="Drop postings whose title contains these "
+                             "keywords, e.g. "
+                             '--exclude-keywords "intern,trainee"')
+    parser.add_argument("--watch", default=None, metavar="STATE.json",
+                        help="Watch mode: flag postings never seen before; "
+                             "seen postings persist in STATE.json")
     return parser
 
 
@@ -150,16 +161,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{done}/{total}]", flush=True)
 
     before = len(urls)
-    results = run_pipeline(
+    results, new_count = run_pipeline(
         urls, profile=profile, tracker_path=args.tracker,
         no_score=args.no_score, use_cache=not args.no_cache,
         workers=args.workers, no_dedupe=args.no_dedupe,
         location_filter=args.location_filter,
-        keyword_filter=args.keyword_filter, min_score=args.min_score,
+        keyword_filter=args.keyword_filter,
+        exclude_companies=args.exclude_companies,
+        exclude_keywords=args.exclude_keywords,
+        min_score=args.min_score, watch_path=args.watch,
         progress_cb=progress)
     after = sum(1 for p in results if not p.error)
     if before - after:
         print(f"Filtered {before - after} posting(s) out")
+    if args.watch:
+        print(f"{new_count} new posting(s) since last run")
 
     with open(out, "w", encoding="utf-8") as fh:
         json.dump([p.to_dict() for p in results], fh, indent=2,

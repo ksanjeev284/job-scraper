@@ -13,6 +13,9 @@ Planned improvements, in rough priority order.
 ## Extraction
 - [x] Structured benefits extraction (health, PTO, bonus, equity)
 - [x] Posting-age parsing for relative dates ("2 days ago", "3 weeks ago")
+- [x] Structured salary normalization (INR LPA, EUR/USD/GBP ranges)
+- [x] Watch mode: flag new postings since last run
+- [x] Company and title-keyword exclusions
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [ ] Fixture-based regression tests (live posting, closed ATS API posting, SPA shell with embedded JSON, block page, duplicates, malformed responses)
 - [ ] Better heading detection for non-English postings

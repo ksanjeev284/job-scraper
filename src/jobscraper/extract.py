@@ -375,3 +375,73 @@ def parse_json_ld(soup: BeautifulSoup) -> dict:
                 "source": "json-ld",
             }
     return out
+
+
+# (currency, range-pattern, single-pattern, multiplier to annual)
+SALARY_SPECS = [
+    ("INR",
+     re.compile(r"([\d.]+)\s*[-\u2013]\s*([\d.]+)\s*(?:lakh|LPA)", re.I),
+     re.compile(r"([\d.]+)\s*(?:lakh|LPA)", re.I),
+     100000),
+    ("INR",
+     re.compile(r"\u20b9\s?([\d,]+)\s*[-\u2013]\s*\u20b9?\s?([\d,]+)", re.I),
+     re.compile(r"\u20b9\s?([\d,]+(?:\.\d+)?)", re.I),
+     1),
+    ("EUR",
+     re.compile(r"\u20ac\s?([\d.,]+)\s*k?\s*[-\u2013]\s*([\d.,]+)\s*k?", re.I),
+     re.compile(r"\u20ac\s?([\d.,]+)", re.I),
+     1),
+    ("USD",
+     re.compile(r"\$\s?([\d,]+)\s*k?\s*[-\u2013]\s*([\d,]+)\s*k?", re.I),
+     re.compile(r"\$\s?([\d,]+)", re.I),
+     1),
+    ("GBP",
+     re.compile(r"\u00a3\s?([\d,]+)\s*k?\s*[-\u2013]\s*([\d,]+)\s*k?", re.I),
+     re.compile(r"\u00a3\s?([\d,]+)", re.I),
+     1),
+]
+
+
+def _num(raw: str) -> float | None:
+    try:
+        return float(raw.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _annualize(value: float, hit: str, mult: float) -> int:
+    if re.search(r"k\s*$", hit.strip(), re.I):
+        value *= 1000
+    return int(value * mult)
+
+
+def normalize_salary(hits: list[str]) -> list[dict]:
+    """Turn raw salary strings into structured annual figures.
+
+    Returns [{raw, currency, min_annual, max_annual}]. A trailing 'k'
+    multiplies by 1000; ranges like '50k-70k' or '18-22 LPA' split into
+    min/max. Unparseable hits are skipped.
+    """
+    out = []
+    for hit in hits:
+        for currency, range_re, single_re, mult in SALARY_SPECS:
+            rng = range_re.search(hit)
+            if rng:
+                lo, hi = _num(rng.group(1)), _num(rng.group(2))
+                if lo is not None and hi is not None:
+                    out.append({
+                        "raw": hit, "currency": currency,
+                        "min_annual": _annualize(min(lo, hi), hit, mult),
+                        "max_annual": _annualize(max(lo, hi), hit, mult),
+                    })
+                    break
+            single = single_re.search(hit)
+            if single:
+                val = _num(single.group(1))
+                if val is None:
+                    continue
+                annual = _annualize(val, hit, mult)
+                out.append({"raw": hit, "currency": currency,
+                            "min_annual": annual, "max_annual": annual})
+                break
+    return out

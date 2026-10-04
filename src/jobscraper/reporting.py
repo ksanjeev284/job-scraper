@@ -24,14 +24,18 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
         lines.append("| Score | Live | Age | Title | Company | Location | "
                      "Gaps |")
         lines.append("|---|---|---|---|---|---|---|")
+        new_posts = [p for p in ranked if p.is_new]
+        if new_posts:
+            lines.append(f"**{len(new_posts)} new since last run**\n")
         for post in ranked:
             assert post.match is not None
             gaps = ", ".join(post.match.skill_gaps[:4]) or "-"
             live = "yes" if post.is_live else (
                 "no" if post.is_live is False else "?")
             age = f"{post.age_days}d" if post.age_days is not None else "-"
+            new = " NEW" if post.is_new else ""
             lines.append(f"| {post.match.total} | {live} | {age} | "
-                         f"{post.title or '?'} | {post.company or '?'} | "
+                         f"{post.title or '?'}{new} | {post.company or '?'} | "
                          f"{post.location or '?'} | {gaps} |")
         lines.append("")
     for post in posts:
@@ -88,6 +92,13 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
             lines.append(f"- Work mode: {', '.join(post.signals['work_mode'])}")
         if post.salary_hits:
             lines.append(f"- Salary found: {', '.join(post.salary_hits)}")
+        if post.salary_normalized:
+            def fmt(n):
+                hi = (f"-{n['max_annual']:,}"
+                      if n['max_annual'] != n['min_annual'] else "")
+                return f"{n['currency']} {n['min_annual']:,}{hi}/yr"
+            norm = "; ".join(fmt(n) for n in post.salary_normalized)
+            lines.append(f"- Salary normalized: {norm}")
         lines.append(f"- Skills detected: "
                      f"{', '.join(post.skills_found) or 'none'}")
         exp = post.experience_years_mentioned

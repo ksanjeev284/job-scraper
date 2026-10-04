@@ -47,6 +47,8 @@ class Posting:
     skills_found: list[str] = field(default_factory=list)
     experience_years_mentioned: list[int] = field(default_factory=list)
     salary_hits: list[str] = field(default_factory=list)
+    salary_normalized: list[dict] = field(default_factory=list)
+    is_new: bool = False
     signals: dict = field(default_factory=dict)
     requirements: list[Section] = field(default_factory=list)
     nice_to_have: list[Section] = field(default_factory=list)

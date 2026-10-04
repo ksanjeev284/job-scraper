@@ -62,6 +62,8 @@ class ScrapeRequest(BaseModel):
     locations: str | None = None
     location_filter: str | None = None
     keyword_filter: str | None = None
+    exclude_companies: str | None = None
+    exclude_keywords: str | None = None
     min_score: int | None = None
     workers: int = 4
 
@@ -121,15 +123,18 @@ def _run_job(job_id: str, urls: list[str], req: ScrapeRequest) -> None:
             _JOBS[job_id]["total"] = total
 
     try:
-        results = run_pipeline(
+        results, new_count = run_pipeline(
             urls, profile=profile, workers=req.workers,
             location_filter=req.location_filter,
-            keyword_filter=req.keyword_filter, min_score=req.min_score,
+            keyword_filter=req.keyword_filter,
+            exclude_companies=req.exclude_companies,
+            exclude_keywords=req.exclude_keywords,
+            min_score=req.min_score,
             progress_cb=progress)
         payload = [p.to_dict() for p in results]
         with _JOBS_LOCK:
             _JOBS[job_id].update(status="done", results=payload,
-                                 profile=profile)
+                                 profile=profile, new_count=new_count)
     except Exception as exc:
         with _JOBS_LOCK:
             _JOBS[job_id].update(status="error", error=str(exc)[:500])

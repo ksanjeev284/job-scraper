@@ -85,3 +85,25 @@ def test_apply_filters_keeps_errors():
 def test_apply_filters_no_filters_keeps_all():
     posts = [_post("Acme", "Engineer"), _post("Globex", "Analyst")]
     assert apply_filters(posts) == posts
+
+
+def test_apply_filters_exclusions():
+    tcs = _post("TCS", "Engineer")
+    acme = _post("Acme", "Senior Intern")
+    good = _post("Globex", "Engineer")
+    kept = apply_filters([tcs, acme, good],
+                         exclude_companies="tcs",
+                         exclude_keywords="intern")
+    assert kept == [good]
+
+
+def test_apply_watch_flags_new(tmp_path):
+    from jobscraper.pipeline import apply_watch
+    state = str(tmp_path / "watch.json")
+    a = _post("Acme", "Engineer")
+    posts, new_count = apply_watch([a], state)
+    assert new_count == 1 and a.is_new
+    b = _post("Acme", "Engineer")
+    c = _post("Globex", "Analyst")
+    posts, new_count = apply_watch([b, c], state)
+    assert new_count == 1 and not b.is_new and c.is_new

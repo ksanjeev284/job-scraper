@@ -146,3 +146,14 @@ def test_extract_benefits_none():
     from jobscraper.extract import extract_benefits
     soup = BeautifulSoup("<h2>Requirements</h2><p>Python</p>", "lxml")
     assert extract_benefits(split_sections(soup)) == []
+
+
+def test_normalize_salary_cases():
+    from jobscraper.extract import normalize_salary
+    assert normalize_salary(["18 LPA"])[0]["min_annual"] == 1800000
+    rng = normalize_salary(["18-22 LPA"])[0]
+    assert (rng["min_annual"], rng["max_annual"]) == (1800000, 2200000)
+    eur = normalize_salary(["€70k-90k"])[0]
+    assert (eur["currency"], eur["min_annual"],
+            eur["max_annual"]) == ("EUR", 70000, 90000)
+    assert normalize_salary(["no salary here"]) == []

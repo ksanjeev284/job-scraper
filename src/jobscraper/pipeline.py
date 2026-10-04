@@ -24,6 +24,7 @@ from jobscraper.extract import (
     extract_salary,
     find_experience,
     find_skills,
+    normalize_salary,
     parse_description_html,
     parse_embedded_job_json,
     parse_json_ld,
@@ -89,12 +90,16 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  workers: int = 4, no_dedupe: bool = False,
                  location_filter: str | None = None,
                  keyword_filter: str | None = None,
+                 exclude_companies: str | None = None,
+                 exclude_keywords: str | None = None,
                  min_score: int | None = None,
-                 progress_cb=None) -> list[Posting]:
-    """Scrape every URL and return processed postings.
+                 watch_path: str | None = None,
+                 progress_cb=None) -> tuple[list[Posting], int]:
+    """Scrape every URL and return (postings, new_count).
 
     ``progress_cb(done, total)`` is called as each URL finishes, so web
-    UIs and CLIs can show progress.
+    UIs and CLIs can show progress. ``new_count`` is nonzero only in
+    watch mode (postings never seen before).
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -120,36 +125,87 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
 
     if not no_dedupe:
         results = dedupe_results(results)
-    if location_filter or keyword_filter:
-        results = apply_filters(results, location_filter, keyword_filter)
+    results = apply_filters(results, location_filter, keyword_filter,
+                            exclude_companies, exclude_keywords)
     if min_score is not None:
         results = [p for p in results
                    if p.error or (p.match and p.match.total >= min_score)]
-    return results
+    new_count = 0
+    if watch_path:
+        results, new_count = apply_watch(results, watch_path)
+    return results, new_count
+
+
+def _split_csv(value: str | None) -> list[str]:
+    return [v.strip().lower() for v in (value or "").split(",") if v.strip()]
 
 
 def apply_filters(posts: list[Posting],
                   location_filter: str | None = None,
-                  keyword_filter: str | None = None) -> list[Posting]:
-    """Keep postings matching the location substring and/or title keywords.
+                  keyword_filter: str | None = None,
+                  exclude_companies: str | None = None,
+                  exclude_keywords: str | None = None) -> list[Posting]:
+    """Keep/drop postings by location, title keywords and exclusions.
 
-    ``keyword_filter`` is a comma-separated list; a posting is kept when its
-    title contains any of them (case-insensitive). Errored postings are
-    always kept so failures stay visible.
+    ``keyword_filter`` keeps titles containing any comma-separated keyword;
+    ``exclude_companies``/``exclude_keywords`` drop matching companies/titles
+    (all case-insensitive). Errored postings are always kept so failures
+    stay visible.
     """
-    keywords = [k.strip().lower() for k in (keyword_filter or "").split(",")
-                if k.strip()]
+    keywords = _split_csv(keyword_filter)
     loc_filter = (location_filter or "").lower()
+    ex_companies = _split_csv(exclude_companies)
+    ex_keywords = _split_csv(exclude_keywords)
 
     def keep(post: Posting) -> bool:
         if post.error:
             return True
         if loc_filter and loc_filter not in (post.location or "").lower():
             return False
-        return not keywords or any(k in (post.title or "").lower()
-                                   for k in keywords)
+        title = (post.title or "").lower()
+        if keywords and not any(k in title for k in keywords):
+            return False
+        company = (post.company or "").lower()
+        if any(e in company for e in ex_companies):
+            return False
+        if any(e in title for e in ex_keywords):
+            return False
+        return True
 
     return [p for p in posts if keep(p)]
+
+
+def apply_watch(posts: list[Posting],
+                state_path: str) -> tuple[list[Posting], int]:
+    """Flag postings never seen before; persist seen keys to ``state_path``.
+
+    Returns (posts, new_count). The state file maps dedupe keys to the
+    first-seen date; it is created on first use.
+    """
+    import json
+    from datetime import date
+    try:
+        with open(state_path, encoding="utf-8") as fh:
+            seen = json.load(fh)
+    except (OSError, ValueError):
+        seen = {}
+    today = date.today().isoformat()
+    new_count = 0
+    for post in posts:
+        if post.error:
+            continue
+        key = "|".join(dedupe_key(post))
+        if key not in seen:
+            post.is_new = True
+            new_count += 1
+            seen[key] = {"url": post.url, "title": post.title,
+                         "first_seen": today}
+    try:
+        with open(state_path, "w", encoding="utf-8") as fh:
+            json.dump(seen, fh, indent=2, ensure_ascii=False)
+    except OSError:
+        pass
+    return posts, new_count
 
 
 def process_url(url: str, use_cache: bool = True,
@@ -272,6 +328,7 @@ def process_url(url: str, use_cache: bool = True,
     post.skills_found = find_skills(full_text, custom_skills)
     post.experience_years_mentioned = find_experience(full_text)
     post.salary_hits = extract_salary(full_text)
+    post.salary_normalized = normalize_salary(post.salary_hits)
     for extra in meta.get("salary_hits_extra") or []:
         if extra and extra not in post.salary_hits:
             post.salary_hits.append(extra)
