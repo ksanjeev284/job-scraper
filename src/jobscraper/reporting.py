@@ -1,10 +1,11 @@
-"""Report writers: ranked Markdown, CSV, HTML, and Excel exports."""
+"""Report writers: ranked Markdown, CSV, HTML, Excel, and RSS exports."""
 
 from __future__ import annotations
 
 import csv
 import html as html_lib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
 from jobscraper.models import Posting
 from jobscraper.scoring import fit_summary
@@ -425,3 +426,65 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
                  "</footer></body></html>")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(parts))
+
+
+def _rss_pubdate(post: Posting) -> str | None:
+    """RFC-2822 pubDate derived from the posting's age; None if unknown."""
+    if post.age_days is None:
+        return None
+    dt = datetime.now(timezone.utc) - timedelta(days=post.age_days)
+    return format_datetime(dt, usegmt=True)
+
+
+def write_rss(posts: list[Posting], path: str, profile: dict) -> None:
+    """Write the ranked results as an RSS 2.0 feed for feed readers.
+
+    Item titles carry the match score ("[85] Senior Splunk Engineer -
+    Acme"); item bodies summarize the fit with escaped posting data only.
+    Unscored postings are skipped, as in the other ranked exports, and
+    watch-mode newcomers get a ``new`` category. Every scraped field is
+    XML-escaped: feed bodies are untrusted content.
+    """
+    ranked = _ranked(posts)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    name = _esc(profile.get("name", "candidate"))
+    new_posts = [p for p in ranked if p.is_new]
+    build_date = format_datetime(datetime.now(timezone.utc), usegmt=True)
+
+    lines = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        "<rss version=\"2.0\">",
+        "<channel>",
+        f"<title>job-scraper results — {name} — {stamp}</title>",
+        "<link>https://github.com/ksanjeev284/job-scraper</link>",
+        f"<description>{len(ranked)} posting(s) ranked by match score; "
+        f"{len(new_posts)} new since last run.</description>",
+        f"<lastBuildDate>{build_date}</lastBuildDate>",
+        "<language>en</language>",
+    ]
+    for post in ranked:
+        match = post.match
+        assert match is not None
+        title = post.title or "Untitled posting"
+        company = post.company or "Unknown company"
+        description = "; ".join(
+            b for b in fit_summary(post, profile) if b)
+        pubdate = _rss_pubdate(post)
+        lines.append("<item>")
+        lines.append(f"<title>[{match.total}] {_esc(title)} — "
+                     f"{_esc(company)}</title>")
+        lines.append(f"<link>{_esc(post.url)}</link>")
+        lines.append(f"<guid isPermaLink=\"true\">{_esc(post.url)}</guid>")
+        if pubdate:
+            lines.append(f"<pubDate>{pubdate}</pubDate>")
+        if description:
+            lines.append(f"<description>{_esc(description)}</description>")
+        lines.append(f"<category>{_esc(company)}</category>")
+        if post.seniority:
+            lines.append(f"<category>{_esc(post.seniority)}</category>")
+        if post.is_new:
+            lines.append("<category>new</category>")
+        lines.append("</item>")
+    lines += ["</channel>", "</rss>", ""]
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))

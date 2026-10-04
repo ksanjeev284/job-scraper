@@ -1,10 +1,11 @@
 """Tests for the HTML report writer."""
 
 import html as html_lib
+import xml.etree.ElementTree as ET
 
 from jobscraper.cli import build_parser
 from jobscraper.models import MatchResult, Posting, Section
-from jobscraper.reporting import write_html
+from jobscraper.reporting import write_html, write_rss
 
 
 def _post(title, score=50, company="Acme", location="Hyderabad",
@@ -95,3 +96,75 @@ def test_cli_accepts_html_flag():
     args = build_parser().parse_args(["https://example.com/j/1",
                                       "--html", "report.html"])
     assert args.html == "report.html"
+
+
+def _feed(posts, profile=None, tmp_path=None):
+    assert tmp_path is not None
+    out = tmp_path / "feed.xml"
+    write_rss(posts, str(out), profile or {"name": "Test User"})
+    return out.read_text(encoding="utf-8")
+
+
+def test_rss_is_well_formed_xml(tmp_path):
+    body = _feed([_post("Junior Role", 30), _post("Senior Role", 90)],
+                 tmp_path=tmp_path)
+    root = ET.fromstring(body)
+    assert root.tag == "rss"
+    items = root.find("channel").findall("item")
+    assert len(items) == 2
+    titles = [it.findtext("title") for it in items]
+    assert "[90] Senior Role" in titles[0]
+    assert titles[0].index("Senior Role") >= 0
+
+
+def test_rss_ranks_highest_score_first(tmp_path):
+    body = _feed([_post("Junior Role", 30), _post("Senior Role", 90)],
+                 tmp_path=tmp_path)
+    assert body.index("Senior Role") < body.index("Junior Role")
+
+
+def test_rss_escapes_untrusted_content(tmp_path):
+    evil = "<script>alert('xss')</script><img src=x onerror=alert(1)>"
+    post = _post(evil, 60)
+    post.requirements = [Section(heading=evil, text=evil)]
+    post.salary_hits = [evil]
+    body = _feed([post], tmp_path=tmp_path)
+    ET.fromstring(body)
+    assert evil not in body
+    assert html_lib.escape(evil, quote=True) in body
+
+
+def test_rss_pubdate_from_age_and_empty_feed(tmp_path):
+    body = _feed([_post("Aged Role", 70, age_days=3),
+                  _post("Unknown Age", 60)],
+                 tmp_path=tmp_path)
+    root = ET.fromstring(body)
+    items = root.find("channel").findall("item")
+    assert items[0].findtext("pubDate") is not None
+    assert items[1].findtext("pubDate") is None
+    empty = _feed([], tmp_path=tmp_path)
+    assert len(ET.fromstring(empty).find("channel").findall("item")) == 0
+
+
+def test_rss_marks_new_postings_and_categories(tmp_path):
+    body = _feed([_post("Fresh Role", 80, is_new=True,
+                        seniority="senior")],
+                 tmp_path=tmp_path)
+    root = ET.fromstring(body)
+    cats = [c.text for c in root.find("channel").find("item").findall(
+        "category")]
+    assert "Acme" in cats
+    assert "senior" in cats
+    assert "new" in cats
+
+
+def test_rss_skips_unscored_postings(tmp_path):
+    body = _feed([_post("Scored", 70), _post("Plain", None)],
+                 tmp_path=tmp_path)
+    assert len(ET.fromstring(body).find("channel").findall("item")) == 1
+
+
+def test_cli_accepts_rss_flag():
+    args = build_parser().parse_args(["https://example.com/j/1",
+                                      "--rss", "feed.xml"])
+    assert args.rss == "feed.xml"

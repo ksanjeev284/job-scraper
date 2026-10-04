@@ -8,7 +8,13 @@ import sys
 from datetime import datetime, timezone
 
 from jobscraper.pipeline import run_pipeline
-from jobscraper.reporting import write_csv, write_html, write_markdown, write_xlsx
+from jobscraper.reporting import (
+    write_csv,
+    write_html,
+    write_markdown,
+    write_rss,
+    write_xlsx,
+)
 from jobscraper.scoring import load_profile, validate_profile
 
 
@@ -34,6 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--excel", default=None,
                         help="Excel (.xlsx) export path "
                              "(needs the 'excel' extra)")
+    parser.add_argument("--rss", default=None,
+                        help="RSS 2.0 feed export path (ranked by match "
+                             "score, for feed readers)")
     parser.add_argument("--no-cache", action="store_true",
                         help="Ignore the local page cache and refetch")
     parser.add_argument("--workers", type=int, default=4,
@@ -353,6 +362,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Excel: {exc}", file=sys.stderr)
             return 1
         print(f"XLSX: {args.excel}")
+    if args.rss:
+        write_rss(results, args.rss, profile)
+        print(f"RSS:  {args.rss}")
 
     from jobscraper.notify import (
         deliver,
