@@ -5,10 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-from jobscraper.pipeline import apply_filters, dedupe_results, process_url
+from jobscraper.pipeline import run_pipeline
 from jobscraper.reporting import write_csv, write_markdown
 from jobscraper.scoring import load_profile
 
@@ -140,46 +139,20 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out or f"scrape-{stamp}.json"
     md = args.md or f"scrape-{stamp}.md"
 
-    def work(url: str):
-        try:
-            return process_url(url, use_cache=not args.no_cache,
-                               profile=profile, tracker_path=args.tracker,
-                               no_score=args.no_score)
-        except Exception as exc:  # never let one URL kill the run
-            from jobscraper.models import Posting
-            return Posting(url=url, error=str(exc)[:300])
+    def progress(done: int, total: int) -> None:
+        print(f"[{done}/{total}]", flush=True)
 
-    results = []
-    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-        futures = {pool.submit(work, url): url for url in urls}
-        done = 0
-        for future in as_completed(futures):
-            done += 1
-            print(f"[{done}/{len(urls)}] {futures[future]}", flush=True)
-            results.append(future.result())
-    order = {url: i for i, url in enumerate(urls)}
-    results.sort(key=lambda post: order.get(post.url, 0))
-
-    if not args.no_dedupe:
-        before = sum(1 for p in results if not p.error)
-        results = dedupe_results(results)
-        dropped = before - sum(1 for p in results if not p.error)
-        if dropped:
-            print(f"Deduped {dropped} cross-board duplicate(s)")
-
-    if args.location_filter or args.keyword_filter:
-        before = len(results)
-        results = apply_filters(results, args.location_filter,
-                                args.keyword_filter)
-        print(f"Filtered {before - len(results)} posting(s) "
-              f"out by location/keyword filters")
-
-    if args.min_score is not None:
-        before = len(results)
-        results = [p for p in results
-                   if p.error or (p.match and p.match.total >= args.min_score)]
-        print(f"Filtered {before - len(results)} posting(s) "
-              f"below score {args.min_score}")
+    before = len(urls)
+    results = run_pipeline(
+        urls, profile=profile, tracker_path=args.tracker,
+        no_score=args.no_score, use_cache=not args.no_cache,
+        workers=args.workers, no_dedupe=args.no_dedupe,
+        location_filter=args.location_filter,
+        keyword_filter=args.keyword_filter, min_score=args.min_score,
+        progress_cb=progress)
+    after = sum(1 for p in results if not p.error)
+    if before - after:
+        print(f"Filtered {before - after} posting(s) out")
 
     with open(out, "w", encoding="utf-8") as fh:
         json.dump([p.to_dict() for p in results], fh, indent=2,

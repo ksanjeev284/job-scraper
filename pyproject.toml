@@ -30,10 +30,12 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = ["playwright>=1.40"]
-dev = ["pytest>=7.0", "ruff>=0.1"]
+web = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.0"]
+dev = ["pytest>=7.0", "ruff>=0.1", "httpx>=0.27"]
 
 [project.scripts]
 jobscraper = "jobscraper.cli:main"
+jobscraper-serve = "jobscraper.web:main"
 
 [project.urls]
 Homepage = "https://github.com/ksanjeev284/job-scraper"
@@ -41,6 +43,9 @@ Issues = "https://github.com/ksanjeev284/job-scraper/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+jobscraper = ["static/*.html"]
 
 [tool.ruff]
 target-version = "py310"

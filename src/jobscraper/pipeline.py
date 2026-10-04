@@ -82,6 +82,51 @@ def dedupe_results(posts: list[Posting]) -> list[Posting]:
             if p.error or id(p) in kept]
 
 
+def run_pipeline(urls: list[str], profile: dict | None = None,
+                 tracker_path: str | None = None,
+                 no_score: bool = False, use_cache: bool = True,
+                 workers: int = 4, no_dedupe: bool = False,
+                 location_filter: str | None = None,
+                 keyword_filter: str | None = None,
+                 min_score: int | None = None,
+                 progress_cb=None) -> list[Posting]:
+    """Scrape every URL and return processed postings.
+
+    ``progress_cb(done, total)`` is called as each URL finishes, so web
+    UIs and CLIs can show progress.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def work(url: str):
+        try:
+            return process_url(url, use_cache=use_cache,
+                               profile=profile, tracker_path=tracker_path,
+                               no_score=no_score)
+        except Exception as exc:  # never let one URL kill the run
+            return Posting(url=url, error=str(exc)[:300])
+
+    results: list[Posting] = []
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {pool.submit(work, url): url for url in urls}
+        done = 0
+        for future in as_completed(futures):
+            done += 1
+            if progress_cb:
+                progress_cb(done, len(urls))
+            results.append(future.result())
+    order = {url: i for i, url in enumerate(urls)}
+    results.sort(key=lambda post: order.get(post.url, 0))
+
+    if not no_dedupe:
+        results = dedupe_results(results)
+    if location_filter or keyword_filter:
+        results = apply_filters(results, location_filter, keyword_filter)
+    if min_score is not None:
+        results = [p for p in results
+                   if p.error or (p.match and p.match.total >= min_score)]
+    return results
+
+
 def apply_filters(posts: list[Posting],
                   location_filter: str | None = None,
                   keyword_filter: str | None = None) -> list[Posting]:

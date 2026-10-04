@@ -20,6 +20,20 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; skips URLs already marked applied in your tracker file
 - **Parallel** — multi-threaded fetching; JSON, ranked Markdown and CSV outputs
 
+## Web GUI
+
+Prefer clicking to typing? Run the built-in web service:
+
+```bash
+pip install -e ".[web]"
+jobscraper-serve
+# open http://127.0.0.1:8000
+```
+
+Paste posting URLs, search LinkedIn, or enumerate a career portal — pick a profile, set filters, watch the progress bar, and browse ranked results with score pills, fit/gap chips and expandable requirements. Download JSON or CSV when done. `jobscraper-serve --host 0.0.0.0 --port 8000` exposes it on your LAN; a `Dockerfile` is included for container deploys (`docker build -t jobscraper . && docker run -p 8000:8000 jobscraper`).
+
+The service binds to localhost by default. Only expose it wider on networks you trust: anyone with access can make it fetch arbitrary URLs.
+
 ## Install
 
 ```bash

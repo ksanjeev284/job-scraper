@@ -29,5 +29,6 @@ Planned improvements, in rough priority order.
 - [ ] Respect `robots.txt` per host (opt-in flag)
 
 ## Reporting
+- [x] Web GUI service (FastAPI + browser UI, JSON/CSV export, Docker)
 - [ ] HTML report option
 - [ ] Notion / Google Sheets export hooks

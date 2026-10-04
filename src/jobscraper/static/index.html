@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jobscraper</title>
+<style>
+  :root { --bg:#0f1420; --card:#182032; --line:#26314a; --txt:#e8edf7;
+          --mut:#93a1bd; --acc:#5b9dff; --good:#3ecf8e; --warn:#ffb020;
+          --bad:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+         background:var(--bg); color:var(--txt); }
+  header { padding:28px 24px 12px; max-width:1080px; margin:0 auto; }
+  header h1 { margin:0; font-size:26px; letter-spacing:.5px; }
+  header h1 span { color:var(--acc); }
+  header p { color:var(--mut); margin:6px 0 0; font-size:14px; }
+  main { max-width:1080px; margin:0 auto; padding:12px 24px 60px; }
+  .panel { background:var(--card); border:1px solid var(--line);
+           border-radius:12px; padding:18px; margin-bottom:16px; }
+  .panel h2 { margin:0 0 12px; font-size:15px; text-transform:uppercase;
+              letter-spacing:1px; color:var(--mut); }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button { background:transparent; border:1px solid var(--line);
+                 color:var(--mut); padding:8px 16px; border-radius:8px;
+                 cursor:pointer; font-size:14px; }
+  .tabs button.active { background:var(--acc); border-color:var(--acc);
+                        color:#fff; }
+  .tabpage { display:none; } .tabpage.active { display:block; }
+  textarea, input[type=text], input[type=number] { width:100%;
+    background:#0c1120; border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:10px 12px; font-size:14px; font-family:inherit; }
+  textarea { min-height:110px; resize:vertical; font-family:ui-monospace,monospace;
+             font-size:13px; }
+  label { display:block; font-size:13px; color:var(--mut); margin:10px 0 4px; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+         gap:12px; }
+  .runrow { display:flex; align-items:center; gap:14px; margin-top:14px; }
+  #runBtn { background:var(--acc); color:#fff; border:none; padding:12px 28px;
+            border-radius:10px; font-size:15px; cursor:pointer; font-weight:600; }
+  #runBtn:disabled { opacity:.5; cursor:wait; }
+  #progress { flex:1; height:10px; background:#0c1120; border-radius:6px;
+              overflow:hidden; display:none; }
+  #progress > div { height:100%; width:0; background:var(--acc);
+                    transition:width .3s; }
+  #status { color:var(--mut); font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:12px; padding:16px 18px; margin-bottom:12px; }
+  .cardhead { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .score { min-width:52px; height:52px; border-radius:10px; display:flex;
+           align-items:center; justify-content:center; font-weight:700;
+           font-size:18px; }
+  .s-high { background:rgba(62,207,142,.15); color:var(--good); }
+  .s-mid { background:rgba(255,176,32,.15); color:var(--warn); }
+  .s-low { background:rgba(255,107,107,.12); color:var(--bad); }
+  .s-na { background:#0c1120; color:var(--mut); }
+  .card h3 { margin:0; font-size:17px; }
+  .card h3 a { color:var(--txt); text-decoration:none; }
+  .card h3 a:hover { color:var(--acc); }
+  .meta { color:var(--mut); font-size:13px; margin-top:4px; }
+  .badge { font-size:11px; padding:3px 9px; border-radius:20px;
+           text-transform:uppercase; letter-spacing:.5px; }
+  .live { background:rgba(62,207,142,.15); color:var(--good); }
+  .dead { background:rgba(255,107,107,.15); color:var(--bad); }
+  .unk { background:#0c1120; color:var(--mut); }
+  .chips { margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:12px; padding:3px 10px; border-radius:14px;
+          background:#0c1120; border:1px solid var(--line); }
+  .chip.fit { border-color:var(--good); color:var(--good); }
+  .chip.gap { border-color:var(--warn); color:var(--warn); }
+  details { margin-top:10px; font-size:13px; }
+  details summary { cursor:pointer; color:var(--acc); }
+  details pre { white-space:pre-wrap; background:#0c1120; padding:10px;
+                border-radius:8px; max-height:300px; overflow:auto; }
+  .toolbar { display:flex; gap:10px; align-items:center; margin:6px 0 14px; }
+  .toolbar a, .toolbar button { background:#0c1120; border:1px solid var(--line);
+    color:var(--txt); padding:8px 16px; border-radius:8px; font-size:13px;
+    text-decoration:none; cursor:pointer; }
+  #err { color:var(--bad); font-size:14px; margin-top:8px; }
+  select { background:#0c1120; border:1px solid var(--line); color:var(--txt);
+           border-radius:8px; padding:8px 10px; font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>job<span>scraper</span></h1>
+  <p>Scrape job postings, extract requirements, score them against your profile.</p>
+</header>
+<main>
+  <div class="panel">
+    <h2>Sources</h2>
+    <div class="tabs">
+      <button class="active" data-tab="urls">Posting URLs</button>
+      <button data-tab="linkedin">LinkedIn search</button>
+      <button data-tab="discover">Career portal</button>
+    </div>
+    <div class="tabpage active" id="tab-urls">
+      <label>One URL per line</label>
+      <textarea id="urls" placeholder="https://boards.greenhouse.io/acme/jobs/123&#10;https://jobs.ashbyhq.com/acme/abc…"></textarea>
+    </div>
+    <div class="tabpage" id="tab-linkedin">
+      <div class="row">
+        <div><label>Keywords</label><input type="text" id="li-kw" placeholder="soc analyst"></div>
+        <div><label>Location</label><input type="text" id="li-loc" placeholder="Hyderabad, India"></div>
+        <div><label>Max results</label><input type="number" id="li-limit" value="25" min="1" max="200"></div>
+        <div><label>Posted within (days)</label><input type="number" id="li-days" placeholder="30" min="1"></div>
+        <div><label>Work mode</label><select id="li-remote"><option value="">any</option><option value="onsite">onsite</option><option value="remote">remote</option><option value="hybrid">hybrid</option></select></div>
+      </div>
+    </div>
+    <div class="tabpage" id="tab-discover">
+      <label>One per line: <code>board:id</code> — e.g. <code>lever:spotify</code>, <code>workday:acme:wd3:acme_ext</code>, <code>greenhouse:acme</code></label>
+      <textarea id="discovers" placeholder="lever:spotify&#10;ashby:acme" style="min-height:70px"></textarea>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Candidate profile</h2>
+    <div class="row">
+      <div><label>Start from</label><select id="profileSel"></select></div>
+    </div>
+    <label>Profile JSON (skills, role tiers, locations, aliases…)</label>
+    <textarea id="profileJson" style="min-height:180px"></textarea>
+  </div>
+
+  <div class="panel">
+    <h2>Options</h2>
+    <div class="row">
+      <div><label>Preferred locations (override)</label><input type="text" id="opt-locations" placeholder="Pune, Remote"></div>
+      <div><label>Location filter</label><input type="text" id="opt-locfilter" placeholder="hyderabad"></div>
+      <div><label>Keyword filter</label><input type="text" id="opt-kwfilter" placeholder="analyst, engineer"></div>
+      <div><label>Minimum score</label><input type="number" id="opt-minscore" placeholder="65" min="0" max="100"></div>
+      <div><label>Workers</label><input type="number" id="opt-workers" value="4" min="1" max="16"></div>
+    </div>
+    <div class="runrow">
+      <button id="runBtn">Scrape</button>
+      <div id="progress"><div></div></div>
+      <span id="status"></span>
+    </div>
+    <div id="err"></div>
+  </div>
+
+  <div id="results"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tabpage').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  $('tab-' + b.dataset.tab).classList.add('active');
+});
+fetch('/api/examples').then(r => r.json()).then(d => {
+  const sel = $('profileSel');
+  d.examples.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+  sel.value = 'template';
+  loadProfile('template');
+});
+function loadProfile(name) {
+  fetch('/api/examples/' + name).then(r => r.json()).then(p => {
+    $('profileJson').value = JSON.stringify(p, null, 2);
+  });
+}
+$('profileSel').onchange = e => loadProfile(e.target.value);
+
+let pollTimer = null, jobId = null;
+$('runBtn').onclick = async () => {
+  $('err').textContent = ''; $('results').innerHTML = '';
+  let profile = null;
+  try { profile = JSON.parse($('profileJson').value); }
+  catch (e) { $('err').textContent = 'Profile JSON is invalid: ' + e.message; return; }
+  const liKw = $('li-kw').value.trim();
+  const body = {
+    urls: $('urls').value.split('\n').map(s => s.trim()).filter(Boolean),
+    linkedin: liKw ? {
+      keywords: liKw, location: $('li-loc').value.trim() || null,
+      limit: parseInt($('li-limit').value) || 25,
+      days: parseInt($('li-days').value) || null,
+      remote: $('li-remote').value || null } : null,
+    discover: $('discovers').value.split('\n').map(s => s.trim()).filter(Boolean),
+    profile,
+    locations: $('opt-locations').value.trim() || null,
+    location_filter: $('opt-locfilter').value.trim() || null,
+    keyword_filter: $('opt-kwfilter').value.trim() || null,
+    min_score: $('opt-minscore').value === '' ? null : parseInt($('opt-minscore').value),
+    workers: parseInt($('opt-workers').value) || 4,
+  };
+  $('runBtn').disabled = true;
+  $('progress').style.display = 'block';
+  try {
+    const r = await fetch('/api/scrape', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || r.statusText); }
+    const j = await r.json(); jobId = j.job_id;
+    pollTimer = setInterval(poll, 1500); poll();
+  } catch (e) { $('err').textContent = e.message; $('runBtn').disabled = false; }
+};
+async function poll() {
+  const r = await fetch('/api/jobs/' + jobId);
+  const j = await r.json();
+  const pct = j.total ? Math.round(100 * j.done / j.total) : 0;
+  document.querySelector('#progress > div').style.width = pct + '%';
+  $('status').textContent = j.status === 'running' ? `Scraping… ${j.done}/${j.total}` : '';
+  if (j.status === 'done') {
+    clearInterval(pollTimer);
+    $('runBtn').disabled = false; $('progress').style.display = 'none';
+    render(j.results);
+  } else if (j.status === 'error') {
+    clearInterval(pollTimer);
+    $('runBtn').disabled = false;
+    $('err').textContent = 'Failed: ' + (j.error || 'unknown');
+  }
+}
+function scoreClass(s) { return s == null ? 's-na' : s >= 70 ? 's-high' : s >= 50 ? 's-mid' : 's-low'; }
+function liveBadge(p) {
+  if (p.is_live === true) return '<span class="badge live">live</span>';
+  if (p.is_live === false) return '<span class="badge dead">closed</span>';
+  return '<span class="badge unk">unknown</span>';
+}
+function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function render(results) {
+  const ok = results.filter(p => !p.error);
+  const ranked = [...ok].sort((a, b) => ((b.match || {}).total || -1) - ((a.match || {}).total || -1));
+  let html = `<div class="toolbar"><span id="status">${ok.length}/${results.length} scraped OK</span>
+    <a href="/api/export/${jobId}.json" download>Download JSON</a>
+    <a href="/api/export/${jobId}.csv" download>Download CSV</a></div>`;
+  ranked.forEach(p => {
+    const m = p.match || {};
+    const age = p.age_days != null ? `${p.age_days}d ago` : 'age?';
+    const fit = (m.matched_skills || []).slice(0, 6).map(s => `<span class="chip fit">${esc(s)}</span>`).join('');
+    const gaps = (m.skill_gaps || []).slice(0, 6).map(s => `<span class="chip gap">${esc(s)}</span>`).join('');
+    const reqs = (p.requirements || []).map(s => `<strong>${esc(s.heading)}</strong>\n${esc(s.text)}`).join('\n\n');
+    html += `<div class="card"><div class="cardhead">
+      <div class="score ${scoreClass(m.total)}">${m.total != null ? m.total : '–'}</div>
+      <div><h3><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title) || '(no title)'}</a></h3>
+      <div class="meta">${esc(p.company) || '?'} · ${esc(p.location) || '?'} · ${age} ${liveBadge(p)}</div></div>
+      </div><div class="chips">${fit}${gaps}</div>
+      ${reqs ? `<details><summary>Requirements</summary><pre>${reqs}</pre></details>` : ''}
+    </div>`;
+  });
+  results.filter(p => p.error).forEach(p => {
+    html += `<div class="card"><div class="meta">Failed: ${esc(p.url)} — ${esc(p.error)}</div></div>`;
+  });
+  $('results').innerHTML = html;
+}
+</script>
+</body>
+</html>
