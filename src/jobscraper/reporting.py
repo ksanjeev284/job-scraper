@@ -67,6 +67,8 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
         if post.signals.get("repost_of_closed"):
             lines.append(f"- Repost: possible ghost job, previously "
                          f"closed as {post.signals['repost_of_closed']}")
+        if post.search_role:
+            lines.append(f"- Search role: {post.search_role}")
         if post.error:
             lines.append(f"- ERROR: {post.error}\n")
             continue
@@ -139,7 +141,7 @@ def _spreadsheet_headers() -> list[str]:
             "type", "job_type", "seniority", "exp_years", "salary", "matched_skills",
             "skill_gaps", "fit_summary", "benefits", "sponsorship",
             "german_required", "work_mode", "tracker", "applied", "repost",
-            "url"]
+            "search_role", "url"]
 
 
 def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
@@ -170,6 +172,7 @@ def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
         post.application_status or "",
         (post.signals.get("repost_of")
          or post.signals.get("repost_of_closed") or ""),
+        post.search_role or "",
         post.url,
     ]
 
@@ -339,7 +342,7 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
         parts.append("<table class=\"rank\"><tr><th>Score</th><th>Live</th>"
                      "<th>Age</th><th>Title</th><th>Company</th>"
                      "<th>Location</th><th>Level</th><th>Applied</th>"
-                     "<th>Gaps</th></tr>")
+                     "<th>Role</th><th>Gaps</th></tr>")
         for idx, post in enumerate(ranked):
             match = post.match
             assert match is not None
@@ -356,6 +359,7 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
                 f"<td>{_esc(post.company)}</td><td>{_esc(post.location)}</td>"
                 f"<td>{_esc(post.seniority or '?')}</td>"
                 f"<td>{_esc(post.application_status or '-')}</td>"
+                f"<td>{_esc(post.search_role or '-')}</td>"
                 f"<td>{gaps}</td></tr>")
         parts.append("</table>")
     else:
@@ -369,6 +373,8 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
                 f"Type: {_esc(post.employment_type)} "
                 f"({_esc(post.job_type or 'unknown')})",
                 f"Seniority: {_esc(post.seniority or 'unknown')}"]
+        if post.search_role:
+            meta.append(f"Search role: {_esc(post.search_role)}")
         if post.age_days is not None:
             meta.append(f"Posted: {post.age_days} days ago")
         parts.append(f"<p class=\"meta\">{' · '.join(meta)}</p>")
@@ -510,6 +516,8 @@ def write_rss(posts: list[Posting], path: str, profile: dict) -> None:
             lines.append(f"<category>{_esc(post.seniority)}</category>")
         if post.job_type and post.job_type != "unknown":
             lines.append(f"<category>job-type:{_esc(post.job_type)}</category>")
+        if post.search_role:
+            lines.append(f"<category>role:{_esc(post.search_role)}</category>")
         if post.is_new:
             lines.append("<category>new</category>")
         lines.append("</item>")

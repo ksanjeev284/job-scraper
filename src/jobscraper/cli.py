@@ -142,6 +142,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hn-max-comments", type=int, default=300,
                         help="Max top-level HN comments to fetch for "
                              "--hn-hiring (default 300)")
+    parser.add_argument("--role-sweep", default=None, metavar="CATEGORY",
+                        help="Sweep every curated role in CATEGORY "
+                             "(see --list-roles): one keyword search per "
+                             "role on --role-sweep-source, each posting "
+                             "tagged with the role that surfaced it")
+    parser.add_argument("--role-sweep-source", default="linkedin",
+                        choices=["linkedin", "remote-boards",
+                                 "workable-search", "themuse-search"],
+                        help="Which keyword search backs --role-sweep "
+                             "(default: linkedin)")
+    parser.add_argument("--list-roles", action="store_true",
+                        help="List the curated role-sweep categories and "
+                             "their roles")
     parser.add_argument("--location", default=None,
                         help="Location filter for --linkedin "
                              "(e.g. \"Hyderabad, India\")")
@@ -151,7 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=25,
                         help="Max --linkedin/--remote-boards/--workable-search/"
                              "--themuse-search/--hn-hiring results to scrape "
-                             "(default 25)")
+                             "(per role for --role-sweep; default 25)")
     parser.add_argument("--days", type=int, default=None,
                         help="Only LinkedIn postings from the last N days")
     parser.add_argument("--remote", default=None,
@@ -491,6 +504,28 @@ def main(argv: list[str] | None = None) -> int:
               "jobscraper --discover-seeds CATEGORY --keyword-filter X")
         return 0
 
+    if args.list_roles:
+        from jobscraper.target_roles import (
+            RoleSweepError,
+            categories,
+            load_roles,
+            roles_for,
+        )
+        try:
+            roles = load_roles()
+        except RoleSweepError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        for cat in categories(roles):
+            names = [r.role for r in roles_for(cat, roles)]
+            print(f"{cat} ({len(names)} roles):")
+            for name in names:
+                print(f"  - {name}")
+        print("\nSweep a category: "
+              "jobscraper --role-sweep CATEGORY "
+              "--role-sweep-source linkedin --keyword-filter X")
+        return 0
+
     if (args.mark_applied or args.list_applications
             or args.applications_stats):
         return _run_application_tracker(args)
@@ -618,6 +653,69 @@ def main(argv: list[str] | None = None) -> int:
                     break
         print(f"themuse-search: {added} postings for "
               f"'{args.themuse_search}'")
+
+    url_roles: dict[str, str] = {}
+    if args.role_sweep:
+        from jobscraper.target_roles import RoleSweepError, roles_for, sweep_roles
+        try:
+            sweep_target_roles = roles_for(args.role_sweep)
+        except RoleSweepError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        source = args.role_sweep_source
+
+        def _sweep_search(keywords: str, limit: int) -> list[str]:
+            if source == "linkedin":
+                from jobscraper.sources.linkedin import search_jobs
+                found: list[str] = []
+                start = 0
+                while len(found) < limit:
+                    cards = search_jobs(
+                        keywords, location=args.location,
+                        geo_id=args.geo_id, start=start,
+                        remote=args.remote,
+                        posted_within_days=args.days)
+                    if not cards:
+                        break
+                    for card in cards:
+                        if card["url"]:
+                            found.append(card["url"])
+                            if len(found) >= limit:
+                                break
+                    if len(cards) < 10:
+                        break
+                    start += 10
+                return found
+            if source == "remote-boards":
+                from jobscraper.sources.remote_boards import search_remote_boards
+                return [c["url"] for c in
+                        search_remote_boards(keywords, limit=limit)
+                        if c.get("url")]
+            if source == "workable-search":
+                from jobscraper.sources.workable_search import search_workable
+                return [c["url"] for c in
+                        search_workable(keywords, limit=limit)
+                        if c.get("url")]
+            from jobscraper.sources.themuse import search_themuse
+            return [c["url"] for c in
+                    search_themuse(keywords,
+                                   location=args.themuse_location,
+                                   category=args.themuse_category,
+                                   limit=limit)
+                    if c.get("url")]
+
+        print(f"role-sweep: {len(sweep_target_roles)} roles in "
+              f"'{args.role_sweep}' via {source}")
+        sweep_urls, url_roles, per_role = sweep_roles(
+            sweep_target_roles, _sweep_search, limit=args.limit)
+        for role_name, added, error in per_role:
+            status = f"FAILED: {error}" if error else f"{added} posting(s)"
+            print(f"  {role_name}: {status}")
+        for url in sweep_urls:
+            if url not in urls:
+                urls.append(url)
+        print(f"role-sweep: {len(sweep_urls)} unique posting(s) across "
+              f"{len(sweep_target_roles)} role(s)")
 
     profile = load_profile(args.profile)
     problems = validate_profile(profile)
@@ -770,6 +868,20 @@ def main(argv: list[str] | None = None) -> int:
                   f"already tracked")
     finally:
         conn.close()
+
+    # Tag postings with the target role whose search surfaced them, so
+    # exports show which query each posting came from.
+    if url_roles:
+        from jobscraper.urls import canonicalize_url
+        tagged = 0
+        for post in results:
+            role = url_roles.get(canonicalize_url(post.url or ""))
+            if role and not post.search_role:
+                post.search_role = role
+                tagged += 1
+        if tagged:
+            print(f"Role sweep: {tagged} of {len(results)} posting(s) "
+                  f"tagged with the role that surfaced them")
 
     with open(out, "w", encoding="utf-8") as fh:
         json.dump([p.to_dict() for p in results], fh, indent=2,

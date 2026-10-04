@@ -17,6 +17,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Hacker News "Who is hiring?" search** — scrape the current month's *Ask HN: Who is hiring?* thread (public Algolia + Firebase HN APIs, no auth): `jobscraper --hn-hiring "security engineer" --limit 20` (keywords match the title, company and comment text; `--hn-month YYYY-MM` pins a thread, `--hn-max-comments N` caps comment fetches)
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover eightfold:paypal:paypal.com`
 - **Seed-board registry** — `--discover-seeds fintech` sweeps a curated, live-verified registry of company career boards by category (`--list-seeds` shows it); omit the category to sweep them all
+- **Target-role sweeps** — `--role-sweep cybersecurity --role-sweep-source linkedin` runs one keyword search per curated role in the category (see `--list-roles`; 16 profession-neutral categories, 120+ roles in `src/jobscraper/data/target_roles.json`) and tags every posting with the role that surfaced it (`search_role` in JSON/CSV/Excel/HTML/JSONL/RSS/markdown); the sweep source can be `linkedin`, `remote-boards`, `workable-search` or `themuse-search`, and `--limit` applies per role
 - **16 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling, Eightfold AI, join.com, Radancy (TalentBrew) — public APIs/feeds, no login. Pinpoint posting URLs (`pinpointhq.com/.../jobs/<id>` and `.../postings/<uuid>`) resolve to full structured postings straight from the no-auth feed (title, description HTML, benefits, workplace/employment type, location, visible compensation), so `--discover pinpoint:slug` boards no longer fall back to the generic scraper
 - **Anti-block fallbacks** — stealth headless Chromium (Playwright) after plain HTTP fails, with bot-challenge detection, per-domain rate limiting, user-agent rotation, retries with backoff, and a 24h page cache. `--browser-pool` (or `JOBSCRAPER_BROWSER_POOL=1`) reuses one browser per worker thread for the whole run instead of launching a fresh Chromium per posting — faster multi-posting runs, with a fresh cookie/storage context per posting and idle browsers shut down automatically
 - **Liveness verdicts** — classifies each posting as LIVE / CLOSED / unknown with a reason; closed postings are detected from page text *and* board-API 404s
@@ -150,12 +151,15 @@ the candidate profile used for match scoring.
 | `--hn-max-comments N` | max top-level HN comments to fetch for `--hn-hiring` (default 300) |
 | `--location TEXT` | location filter for `--linkedin` |
 | `--geo-id ID` | LinkedIn geoId for `--linkedin` (more reliable than text) |
-| `--limit N` | max search results to scrape for `--linkedin` / `--remote-boards` / `--workable-search` / `--themuse-search` / `--hn-hiring` (default 25) |
+| `--limit N` | max search results to scrape for `--linkedin` / `--remote-boards` / `--workable-search` / `--themuse-search` / `--hn-hiring` (per role for `--role-sweep`; default 25) |
 | `--days N` | only LinkedIn postings from the last N days |
 | `--remote MODE` | `onsite` / `remote` / `hybrid` filter for `--linkedin` |
 | `--discover BOARD:ID` | enumerate a career portal (repeatable; see below) |
 | `--discover-seeds [CATEGORY]` | sweep the verified seed-board registry (see below; category optional) |
 | `--list-seeds` | list the seed registry and exit |
+| `--role-sweep CATEGORY` | sweep every curated role in CATEGORY (see `--list-roles`): one keyword search per role, each posting tagged with the role that surfaced it |
+| `--role-sweep-source SOURCE` | keyword search backing `--role-sweep`: `linkedin`, `remote-boards`, `workable-search`, `themuse-search` (default `linkedin`) |
+| `--list-roles` | list the curated role-sweep categories and their roles, then exit |
 | `--locations "A,B"` | preferred locations for this run (overrides profile) |
 | `--location-filter TEXT` | keep only postings whose location contains TEXT |
 | `--keyword-filter "A,B"` | keep only postings whose title contains a keyword |

@@ -110,6 +110,7 @@ class Posting:
     full_text_chars: int = 0
     tracker_status: str | None = None
     application_status: str | None = None
+    search_role: str | None = None
     match: MatchResult | None = None
     error: str | None = None
 
