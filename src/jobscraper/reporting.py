@@ -60,6 +60,12 @@ def write_markdown(posts: list[Posting], path: str, profile: dict) -> None:
             lines.append(f"- Tracker: {post.tracker_status}")
         if post.age_days is not None:
             lines.append(f"- Posted: {post.age_days} days ago")
+        if post.signals.get("repost_of"):
+            lines.append(f"- Repost: same content as "
+                         f"{post.signals['repost_of']}")
+        if post.signals.get("repost_of_closed"):
+            lines.append(f"- Repost: possible ghost job, previously "
+                         f"closed as {post.signals['repost_of_closed']}")
         if post.error:
             lines.append(f"- ERROR: {post.error}\n")
             continue
@@ -131,7 +137,8 @@ def _spreadsheet_headers() -> list[str]:
     return ["score", "live", "age_days", "title", "company", "location",
             "type", "seniority", "exp_years", "salary", "matched_skills",
             "skill_gaps", "fit_summary", "benefits", "sponsorship",
-            "german_required", "work_mode", "tracker", "applied", "url"]
+            "german_required", "work_mode", "tracker", "applied", "repost",
+            "url"]
 
 
 def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
@@ -159,6 +166,8 @@ def _spreadsheet_row(post: Posting, profile: dict) -> list[object]:
         ",".join(post.signals.get("work_mode") or []),
         post.tracker_status or "",
         post.application_status or "",
+        (post.signals.get("repost_of")
+         or post.signals.get("repost_of_closed") or ""),
         post.url,
     ]
 
@@ -369,6 +378,15 @@ def write_html(posts: list[Posting], path: str, profile: dict) -> None:
         if post.low_content_warning:
             parts.append(f"<p class=\"warn\">WARNING: "
                          f"{_esc(post.low_content_warning)}</p>")
+        if post.signals.get("repost_of"):
+            parts.append(f"<p class=\"warn\">REPOST: same content as "
+                         f"<a href=\"{_esc(post.signals['repost_of'])}\">"
+                         f"{_esc(post.signals['repost_of'])}</a></p>")
+        if post.signals.get("repost_of_closed"):
+            parts.append(f"<p class=\"warn\">POSSIBLE GHOST JOB: repost "
+                         f"of previously closed posting "
+                         f"<a href=\"{_esc(post.signals['repost_of_closed'])}\">"
+                         f"{_esc(post.signals['repost_of_closed'])}</a></p>")
         if post.error:
             parts.append(f"<p class=\"warn\">ERROR: {_esc(post.error)}</p>")
             parts.append("</div>")

@@ -94,6 +94,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "highest-scored copy (also via "
                              "JOBSCRAPER_FUZZY_DEDUPE=1, threshold via "
                              "JOBSCRAPER_FUZZY_THRESHOLD)")
+    parser.add_argument("--detect-reposts", action="store_true",
+                        help="Flag reposts: postings whose content "
+                             "fingerprint (company, level-stripped title, "
+                             "location, description body) matches another "
+                             "posting scraped under a different URL get a "
+                             "'repost_of' pointer instead of merging away; "
+                             "with --sqlite, postings matching a closed "
+                             "posting from the history are flagged as "
+                             "possible ghost jobs "
+                             "(also via JOBSCRAPER_DETECT_REPOSTS=1)")
     parser.add_argument("--linkedin", default=None, metavar="KEYWORDS",
                         help="Search LinkedIn jobs for KEYWORDS and scrape "
                              "the results")
@@ -635,6 +645,7 @@ def main(argv: list[str] | None = None) -> int:
         watch_path=args.watch,
         respect_robots=args.respect_robots,
         browser_pool=args.browser_pool,
+        detect_reposts=args.detect_reposts,
         progress_cb=progress, run_stats=True)
     after = sum(1 for p in results if not p.error)
     if before - after:
@@ -644,6 +655,11 @@ def main(argv: list[str] | None = None) -> int:
                         for n in p.fetch_notes))
     if merged:
         print(f"Fuzzy-dedupe merged near-duplicates into {merged} "
+              f"posting(s)")
+    reposts = sum(1 for p in results
+                  if p.signals.get("repost_of"))
+    if reposts:
+        print(f"Repost check: flagged {reposts} repost(s) of same-content "
               f"posting(s)")
     if args.watch:
         print(f"{new_count} new posting(s) since last run")
@@ -694,6 +710,15 @@ def main(argv: list[str] | None = None) -> int:
         write_jsonl(results, args.jsonl, profile)
         print(f"JSONL: {args.jsonl}")
     if args.sqlite:
+        from jobscraper.reposts import (
+            detect_reposts_from_env,
+            flag_historical_reposts,
+        )
+        if args.detect_reposts or detect_reposts_from_env():
+            ghosts = flag_historical_reposts(results, args.sqlite)
+            if ghosts:
+                print(f"Repost check: {ghosts} posting(s) look like reposts "
+                      f"of previously closed postings (possible ghost jobs)")
         write_sqlite(results, args.sqlite, profile)
         print(f"SQLite: {args.sqlite}")
 

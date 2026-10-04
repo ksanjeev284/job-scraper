@@ -22,7 +22,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 - **Structured extraction** — splits descriptions into headed sections, buckets them into requirements / responsibilities / nice-to-haves, and detects skills, experience years, salary figures, sponsorship mentions, language requirements and work mode; section headings are recognized in English, German, French, Spanish, Dutch and Italian
 - **0-100 match scoring** — against a candidate profile JSON: technical skills (35), experience (25), seniority (15), certifications (10), location (5), role relevance (5), compensation (5); includes skill gaps and a fit/watch summary
 - **Seniority inference** — every posting gets an explicit level (`intern` / `entry` / `mid` / `senior` / `staff` / `lead` / `manager` / `director` / `executive` / `unknown`) with match evidence, from title markers first, then description signals, then required-experience bands; `--seniority senior,staff` filters runs by level, and the level shows in CSV/Excel/HTML exports
-- **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; `--fuzzy-dedupe` also merges same-employer postings with near-identical titles (e.g. "Splunk Engineer (Nights)" vs "Splunk Engineer - Night Shift") and records the merged URLs; skips URLs already marked applied in your tracker file
+- **Dedupe** — drops the same job listed on multiple boards, keeping the best-scoring copy; `--fuzzy-dedupe` also merges same-employer postings with near-identical titles (e.g. "Splunk Engineer (Nights)" vs "Splunk Engineer - Night Shift") and records the merged URLs; `--detect-reposts` instead *flags* reposts of same-content postings (and, with `--sqlite`, possible ghost jobs revived after closure) without merging them away; skips URLs already marked applied in your tracker file
 - **URL canonicalization** — tracking parameters (`utm_*`, `trk`, `gclid`, …), fragments, host-case variants and trailing slashes are stripped before fetching, so the same posting shared from different sources is fetched once and reported under one clean URL; the applied-tracker check matches across those variants too
 - **Parallel** — multi-threaded fetching; JSON, ranked Markdown, CSV, HTML, Excel, JSONL, RSS and SQLite outputs
 - **Excel export** — `--excel results.xlsx` writes the ranked spreadsheet: score-colored cells, frozen header with autofilter, clickable posting URLs, formula-injection neutralized (needs `pip install -e ".[excel]"`)
@@ -179,6 +179,7 @@ the candidate profile used for match scoring.
 | `--no-cache` | ignore the local 24h page cache |
 | `--no-dedupe` | keep cross-board duplicates |
 | `--fuzzy-dedupe` | also merge near-duplicate postings: same employer with near-identical titles (token-set similarity, default floor 0.85; `JOBSCRAPER_FUZZY_DEDUPE=1` / `JOBSCRAPER_FUZZY_THRESHOLD`); keeps the highest-scored copy and records merged URLs on it |
+| `--detect-reposts` | flag reposts (see below; `JOBSCRAPER_DETECT_REPOSTS=1`); with `--sqlite`, also flags postings that match a previously closed posting (possible ghost jobs) |
 | `--respect-robots` | honor robots.txt for every fetched URL (also via the `JOBSCRAPER_RESPECT_ROBOTS` env var) |
 | `--proxy URL` | proxy URL for all requests (repeatable; rotated round-robin) |
 | `--proxies-file PATH` | text file with one proxy URL per line (`#` comments allowed) |
@@ -209,6 +210,22 @@ JobSpy `hours_old`-style, but applied uniformly across every source
 labels ("3 days ago", "posted 2 weeks ago"). A posting whose age cannot
 be determined is always kept (reported as unknown), never silently
 dropped, and fetch failures stay visible regardless of the filter.
+
+### Repost detection
+
+`--detect-reposts` flags postings whose content fingerprint — company,
+level-stripped title, location, and description body — matches another
+posting scraped under a different canonical URL. Unlike fuzzy dedupe,
+which merges near-duplicates away, reposts keep their own record and get
+a `repost_of` pointer (visible in JSON signals, the `repost` CSV/Excel
+column, and the HTML report). Postings too thin to fingerprint are left
+unflagged: a missing body is reported as unknown, never assumed unique.
+
+When combined with `--sqlite`, the run also checks the SQLite history:
+a fresh posting matching a posting recorded as closed (`live = 0`) under
+a different URL is flagged as a repost of the closed posting — a classic
+ghost-job signal. Fetch errors are never treated as closures, and a
+missing history simply disables the check.
 
 ### Respecting robots.txt
 

@@ -48,6 +48,10 @@ from jobscraper.rendering import (
     fetch_requests,
     set_default_pool,
 )
+from jobscraper.reposts import (
+    detect_reposts_from_env,
+    mark_reposts,
+)
 from jobscraper.salary import meets_salary_threshold, parse_salary_threshold
 from jobscraper.scoring import posting_age_days, score_posting
 from jobscraper.seniority import LEVELS as SENIORITY_LEVELS
@@ -123,6 +127,7 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  respect_robots: bool = False,
                  browser_pool: bool = False,
                  progress_cb=None,
+                 detect_reposts: bool = False,
                  run_stats: bool = False) -> tuple:
     """Scrape every URL and return (postings, new_count, closed).
 
@@ -142,6 +147,11 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     postings from the same employer with near-identical titles
     (``JOBSCRAPER_FUZZY_THRESHOLD`` tunes the similarity floor, default
     0.85); merged URLs are recorded in the kept posting's fetch notes.
+    ``detect_reposts`` (also ``JOBSCRAPER_DETECT_REPOSTS=1``) flags
+    postings whose content fingerprint (company, level-stripped title,
+    location, description body) matches another posting scraped under a
+    different canonical URL -- reposts keep their own record and get a
+    ``signals["repost_of"]`` pointer instead of being merged away.
     ``run_stats`` also collects
     per-source run diagnostics (a failing board can never silently
     vanish) and appends them as a fourth return value: a list of
@@ -202,6 +212,8 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
     if min_score is not None:
         results = [p for p in results
                    if p.error or (p.match and p.match.total >= min_score)]
+    if detect_reposts or detect_reposts_from_env():
+        mark_reposts(results)
     new_count, closed = 0, []
     if watch_path:
         results, new_count, closed = apply_watch(results, watch_path)
