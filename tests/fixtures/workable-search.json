@@ -1,0 +1,89 @@
+{
+ "title": "Workable",
+ "totalSize": 1601,
+ "jobs": [
+  {
+   "department": "Technology",
+   "id": "712cd317-252e-4d5a-88be-5896c9b5023f",
+   "title": "Security Engineer",
+   "state": "published",
+   "description": "<p><strong>About the Role:</strong></p><p>The Security Engineer plays a crucial role in the development, implementation, maintenance, and monitoring of security controls at LMAX. This position focuses on security technologies and requires individuals with a curious mindset and the ability to identify vulnerabilities at both technical and process levels. Security Engineers must stay updated with the latest tools, security methods, and developments.</p><p>\u00a0</p><p><strong>About You:</strong></p><p>You are passionate about information technology, understand computer systems and networks to a high level and can work with a variety of operating systems and programming/scripting languages. You have an inquisitive mindset, showing the ability to identify vulnerabilities at both technical and process levels, and to explain your findings to a non-technical audience.</p><p>You have an automation-first mindset, understand information security standards and have experience implementing best practice in on-premises and cloud-based environments.</p><p>You are capable of working independently in a fast-paced environment. We encourage independent problem-solving, but also expect you to engage with your peers and work with them to break knowledge silos. You will initiate constructive discussions and propose solutions to any challenges encountered. Most importantly, you understand the necessity of harmonizing security endeavours with business goals.</p><p>\u00a0</p><p><strong>Main Duties &amp; Responsibilities:</strong></p><p>\u00a0</p><p><strong>Core:</strong></p><ul><li>Map attack paths and help implement controls to manage associated risks.</li><li>Create and maintain processes and procedures to demonstrate system control to auditors and regulators.</li><li>Work within the Security Operations Centre to implement and maintain security controls, whilst ensuring objectives are met</li><li>Participate in the security incident management process, including cyber incident response and remediation</li><li>Contribute to internal and third-party IT audits across business functions and activities within the LMAX Group.</li><li>Create, maintain, and deliver cyber security awareness training for colleagues.</li><li>Manage and maintain the security infrastructure and solutions</li><li>Identify opportunities for process improvement and implement associated automations as required.</li></ul><p>\u00a0</p><p></p><p><strong>Mainstream:</strong></p><ul><li>Manage and mitigate technical vulnerabilities, working with internal teams and external suppliers towards remediation</li><li>Review and fulfill security requests from the business for various services.</li><li>Help manage security risks by reviewing business requests and ensuring security posture is unaffected</li><li>Proactively investigate host, network, and log-based security events and respond to suspected compromises.</li><li>Collaborate with identity and access management, associated policies and controls</li></ul><p>\u00a0</p><p>\u00a0</p><p><strong>Once more advanced in the role:</strong></p><ul><li>Manage and maintain the security infrastructure.</li><li>Research and evaluate technologies to mitigate cyber security threats.</li><li>Assist with successful handling of major security incidents and investigations.</li><li>Establish strategies and procedures for offensive security testing, engaging with external partners when needed</li><li>Maintain high visibility into the LMAX estate for security events, while minimizing false positives.</li></ul><p>\u00a0</p><p><strong>Success Looks Like:</strong></p><ul><li>Ensure compliance with security best practices in network operations, system management, and processes.</li><li>Increased signal-to-noise security events ratio</li><li>Support the successful completion of internal and third-party led audit efforts.</li><li>Minimize the number of successful phishing attacks and other end-user security incidents.</li><li>Demonstrate rapid response capabilities during attacks and provide clear reporting to management.</li><li>Receive positive feedback from technology teams and other business stakeholders.</li></ul>",
+   "socialSharingDescription": "About the Role:The Security Engineer plays a crucial role in the development, implementation, maintenance, and monitoring of security controls at LMAX. This position focuses on security technologies and requires individuals with a curious mindset and t...",
+   "employmentType": "Full-time",
+   "benefitsSection": "<ul><li>25 days of holiday</li></ul><ul><li>Bonus</li><li>Pension contribution</li><li>Private medical, dental, and vision coverage</li><li>Life assurance</li><li>Critical illness cover</li><li>Wellness contribution program with access to ClassPass</li><li>Plumm Platform</li><li>Five volunteering days</li><li>Give as You Earn initiative</li><li>Learning and development programs</li><li>Electric Vehicle Scheme</li><li>Cycle to Work Scheme</li><li>Season Ticket Loan</li></ul>",
+   "requirementsSection": "",
+   "url": "https://jobs.workable.com/view/eYz4c3Arh3NUQwtZvK9j9p/hybrid-security-engineer-in-london-at-lmax-group",
+   "language": "en",
+   "locations": [
+    "London, England, United Kingdom"
+   ],
+   "location": {
+    "city": "London",
+    "subregion": "England",
+    "countryName": "United Kingdom"
+   },
+   "created": "2026-09-24T12:59:55.297Z",
+   "updated": "2026-09-24T12:59:55.297Z",
+   "company": {
+    "id": "55a09f41-fef6-4b03-8c1f-48ad244c04cb",
+    "title": "LMAX Group",
+    "website": "http://www.lmax.com",
+    "image": "",
+    "description": "<p>Headquartered in London, LMAX Group is a global financial technology company and the leading independent operator of multiple institutional execution venues for FX and crypto currency trading.<br /></p><p>The Group\u2019s portfolio includes LMAX Exchange (institutional FX exchange and FCA regulated MTF), LMAX Global (FCA and CySec regulated brokers) and LMAX Digital (GFSC regulated institutional spot crypto currency exchange).</p><p>With 11 offices worldwide, LMAX Group builds and runs its own high performance, ultra-low latency global exchange infrastructure which includes matching engines in London, New York, Tokyo and Singapore. LMAX Group services and facilitates the exchange of currencies between a wide range of customers spanning 100 countries, including leading banks, asset managers and retail brokerages.</p><p>LMAX Group is a leading industry player, demonstrating consistent high growth and profitability. Uniquely positioned to offer both FX and crypto trading, the Group is transforming the future of capital markets and shaping the evolving crypto currency ecosystem.</p><p>Our mission is to create a level playing field for all participants in the world\u2019s biggest financial markets, through transparent, precise and consistent execution, based on robust trading technology.</p><p>We are looking for people who want to help us change the game, not just play it.</p>",
+    "url": "https://jobs.workable.com/company/bzgJ55nhkPWXa88wfXygSK/jobs-at-lmax-group",
+    "socialSharingDescription": "Headquartered in London, LMAX Group is a global financial technology company and the leading independent operator of multiple institutional execution venues for FX and crypto currency trading.The Group\u2019s portfolio includes LMAX Exchange (institutional ..."
+   },
+   "isFeatured": false,
+   "workplace": "hybrid"
+  },
+  {
+   "department": "Engineering",
+   "id": "313c1d70-aa01-4f5f-be02-7edf1f262673",
+   "title": "Security Engineer",
+   "state": "published",
+   "description": "<p>Healthcare has always been about treating problems after they happen.</p><p>Re18 is a longevity tech platform that models the entire preventive health journey seamlessly. We go far beyond offering premium health check-ups. Instead, our technology builds personalized longevity journeys for every user of our service. We then track &amp; manage these journeys end-to-end, intervening as needed with expert consultations, biomarker follow-ups, supplement delivery, hyperbaric oxygen sessions &amp; the list goes on.</p><p>Our vision is to enable millions of people to extend their healthspan through data-driven diagnostics and personalized longevity insights.</p><p>If you want to work on extending &amp; improving human lives at scale, you're in the right place.</p><p></p><p><em><strong>\u201cDefend what matters\u201d</strong></em></p><p></p><p>Re18 is getting closer to fulfilling its mission &amp; we are seeking a skilled, determined and hands-on Security Engineer to join our Engineering team.</p><p></p><p><strong>Your responsibilities will include</strong></p><ul><li>Design and maintain security controls for applications, infrastructure and cloud environments</li><li>Process, prioritize and follow up on security assessment reports, coordinating with relevant stakeholders for remediation</li><li>Implement and manage Web Application Firewalls (WAF), network segmentation and device security controls</li><li>Suggest and setup security monitoring, detection and alerting systems</li><li>Conduct and support security incident investigations, log analysis and root cause evaluations</li><li>Collaborate with engineering teams to integrate security into all phases of development and operations</li><li>Support compliance initiatives and assist in maintaining standards like SOC 2, ISO 27001, or HIPAA</li><li>Other tasks as assigned\u00a0</li></ul><p><strong>What you will need</strong></p><ul><li>3+ years of professional experience in cybersecurity engineering roles\u00a0</li><li>Hands-on experience in securing web applications, operating systems, and networks</li></ul><ul><li>Familiarity with TCP/IP protocols, and cloud computing platforms (AWS, Azure, or GCP)</li><li>Strong understanding of cybersecurity fundamentals and secure architecture principles</li><li>Be able to apply all your recommendations, findings and security mitigations yourself with technical hands on experience. Not just as a consultant.</li><li>Experience with endpoint protection platforms is a plus</li></ul><ul><li>Excellent communication skills in English and Greek, both written and verbal</li><li>Analytical mindset with attention to detail</li><li>Ability to work independently while collaborating effectively with cross-functional teams</li></ul><p><strong>Re18 perks</strong></p><ul><li>Competitive compensation package ranging from \u20ac40,000 - \u20ac55,000 gross per annum</li><li>Company provided equipment</li><li>An exciting high-growth career trajectory</li><li>Private health insurance plan</li><li>Continuous training</li><li>Part of a youthful talented team striving for innovation</li></ul><p><strong>Reports to: Chief Technology Officer</strong></p><p></p>",
+   "socialSharingDescription": "Healthcare has always been about treating problems after they happen.Re18 is a longevity tech platform that models the entire preventive health journey seamlessly. We go far beyond offering premium health check-ups. Instead, our technology builds perso...",
+   "employmentType": "",
+   "benefitsSection": "",
+   "requirementsSection": "",
+   "url": "https://jobs.workable.com/view/75CcuTLxfQSmeSJ9DXRNPv/hybrid-security-engineer-in-municipality-of-pallini-at-re18",
+   "language": "en",
+   "locations": [
+    "Municipality of Pallini, Attica, Greece"
+   ],
+   "location": {
+    "city": "Municipality of Pallini",
+    "subregion": "Attica",
+    "countryName": "Greece"
+   },
+   "created": "2026-09-24T09:16:31.227Z",
+   "updated": "2026-09-24T09:16:31.227Z",
+   "company": {
+    "id": "7c642d00-ac50-449a-84d5-89cc5494e297",
+    "title": "RE18",
+    "website": "https://re18.com/",
+    "image": "",
+    "description": "",
+    "url": "https://jobs.workable.com/company/gmUhpJgFGh79jfyW1VkP1T/jobs-at-re18",
+    "socialSharingDescription": ""
+   },
+   "isFeatured": false,
+   "workplace": "hybrid"
+  },
+  {
+   "id": "deadbeef-0000-0000-0000-000000000000",
+   "title": "  Security Engineer (Test)  ",
+   "company": null,
+   "locations": [],
+   "location": {
+    "city": "Berlin"
+   },
+   "url": null,
+   "created": "2026-10-01T00:00:00.000Z",
+   "department": null,
+   "employmentType": "Full-time",
+   "workplace": null
+  }
+ ],
+ "autoAppliedFilters": {}
+}

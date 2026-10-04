@@ -65,6 +65,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Search remote-only job boards (RemoteOK, "
                              "Remotive, We Work Remotely, Working Nomads) "
                              "for KEYWORDS and scrape the results")
+    parser.add_argument("--workable-search", default=None, metavar="KEYWORDS",
+                        help="Search every Workable-hosted career board at "
+                             "once (jobs.workable.com, public no-auth API) "
+                             "for KEYWORDS and scrape the results")
     parser.add_argument("--location", default=None,
                         help="Location filter for --linkedin "
                              "(e.g. \"Hyderabad, India\")")
@@ -72,8 +76,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="LinkedIn geoId for --linkedin (more reliable "
                              "than --location)")
     parser.add_argument("--limit", type=int, default=25,
-                        help="Max --linkedin/--remote-boards results to "
-                             "scrape (default 25)")
+                        help="Max --linkedin/--remote-boards/--workable-search "
+                             "results to scrape (default 25)")
     parser.add_argument("--days", type=int, default=None,
                         help="Only LinkedIn postings from the last N days")
     parser.add_argument("--remote", default=None,
@@ -332,6 +336,19 @@ def main(argv: list[str] | None = None) -> int:
                     break
         print(f"remote-boards: {added} postings for "
               f"'{args.remote_boards}'")
+
+    if args.workable_search:
+        from jobscraper.sources.workable_search import search_workable
+        cards = search_workable(args.workable_search, limit=args.limit)
+        added = 0
+        for card in cards:
+            if card.get("url") and card["url"] not in urls:
+                urls.append(card["url"])
+                added += 1
+                if added >= args.limit:
+                    break
+        print(f"workable-search: {added} postings for "
+              f"'{args.workable_search}'")
 
     if not urls:
         print("error: give URLs or --urls file", file=sys.stderr)

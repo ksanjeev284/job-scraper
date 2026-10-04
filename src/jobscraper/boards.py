@@ -276,6 +276,42 @@ def fetch_workable(url: str) -> dict | None:
     return None
 
 
+def fetch_workable_view(url: str) -> dict | None:
+    """Workable cross-board job view: jobs.workable.com/view/<token>/...
+
+    Matches https://jobs.workable.com/view/<token>/<slug> URLs produced by
+    --workable-search; the per-job JSON API behind the view page returns
+    the full posting, so no page scrape is needed.
+    """
+    match = re.search(r"jobs\.workable\.com/view/([\w-]+)", url)
+    if not match:
+        return None
+    token = match.group(1)
+    data = http_get(f"https://jobs.workable.com/api/v1/jobs/{token}",
+                    max_retries=2).json()
+    if not isinstance(data, dict) or "title" not in data:
+        return None
+    company = data.get("company") or {}
+    locations = data.get("locations") or []
+    description = "\n".join(part for part in (
+        data.get("description") or "",
+        data.get("requirementsSection") or "",
+        data.get("benefitsSection") or "",
+    ) if part)
+    return {
+        "title": data.get("title"),
+        "company": (company.get("title")
+                    if isinstance(company, dict) else None),
+        "location": locations[0] if locations else None,
+        "employment_type": data.get("employmentType"),
+        "department": data.get("department"),
+        "description_html": description,
+        "posted": data.get("created"),
+        "position_url": data.get("url"),
+        "source": "workable-api",
+    }
+
+
 def fetch_breezy(url: str) -> dict | None:
     """Breezy HR: public board feed at {tenant}.breezy.hr/json.
 
@@ -519,6 +555,7 @@ BOARD_FETCHERS: list[Fetcher] = [
     fetch_personio,
     fetch_recruitee,
     fetch_workable,
+    fetch_workable_view,
     fetch_breezy,
     fetch_eightfold,
     fetch_linkedin,

@@ -12,6 +12,7 @@ Works for any profession: configure your skills, role tiers and locations in a p
 
 - **LinkedIn as a source** — public guest job-search API (no login): `jobscraper --linkedin "soc analyst" --location "Hyderabad, India" --days 30`
 - **Remote-only boards** — RemoteOK, Remotive, We Work Remotely and Working Nomads (all public, no-auth feeds): `jobscraper --remote-boards "security engineer" --limit 20`
+- **Workable cross-board search** — one keyword query across *every* Workable-hosted career board (jobs.workable.com public API): `jobscraper --workable-search "security engineer" --limit 20`
 - **Career-portal discovery** — enumerate *every* open posting on a company's career page: `--discover lever:spotify`, `--discover workday:acme:wd3:acme_ext`, `--discover eightfold:paypal:paypal.com`
 - **Seed-board registry** — `--discover-seeds fintech` sweeps a curated, live-verified registry of company career boards by category (`--list-seeds` shows it); omit the category to sweep them all
 - **14 ATS integrations** — Lever, Ashby, Greenhouse, SmartRecruiters, Workday, Teamtailor, Personio, Recruitee, Workable, Breezy HR, BambooHR, Pinpoint, Rippling, Eightfold AI — public APIs/feeds, no login
@@ -96,9 +97,10 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--urls FILE` | file with one URL per line |
 | `--linkedin KEYWORDS` | search LinkedIn and scrape results |
 | `--remote-boards KEYWORDS` | search remote-only boards (RemoteOK, Remotive, We Work Remotely, Working Nomads) and scrape results |
+| `--workable-search KEYWORDS` | search every Workable-hosted career board (jobs.workable.com, public no-auth API) and scrape results |
 | `--location TEXT` | location filter for `--linkedin` |
 | `--geo-id ID` | LinkedIn geoId for `--linkedin` (more reliable than text) |
-| `--limit N` | max LinkedIn results (default 25) |
+| `--limit N` | max search results to scrape for `--linkedin` / `--remote-boards` / `--workable-search` (default 25) |
 | `--days N` | only LinkedIn postings from the last N days |
 | `--remote MODE` | `onsite` / `remote` / `hybrid` filter for `--linkedin` |
 | `--discover BOARD:ID` | enumerate a career portal (repeatable; see below) |
