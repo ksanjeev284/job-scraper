@@ -106,6 +106,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "(comma-separated): intern, entry, mid, senior, "
                              "staff, lead, manager, director, executive, "
                              "unknown; e.g. --seniority senior,staff")
+    parser.add_argument("--min-salary", default=None, metavar="AMOUNT",
+                        help="Keep only postings whose salary range can "
+                             "reach AMOUNT (annual), e.g. --min-salary "
+                             "\"80K USD\" or --min-salary \"25 LPA\"; "
+                             "postings without a parsed salary are kept")
+    parser.add_argument("--max-salary", default=None, metavar="AMOUNT",
+                        help="Keep only postings whose salary range bottom "
+                             "is at or below AMOUNT (annual), e.g. "
+                             "--max-salary \"200K USD\"; postings without "
+                             "a parsed salary are kept")
     parser.add_argument("--watch", default=None, metavar="STATE.json",
                         help="Watch mode: flag postings never seen before; "
                              "seen postings persist in STATE.json")
@@ -310,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         exclude_companies=args.exclude_companies,
         exclude_keywords=args.exclude_keywords,
         min_score=args.min_score, seniority=args.seniority,
+        salary_min=args.min_salary, salary_max=args.max_salary,
         watch_path=args.watch,
         respect_robots=args.respect_robots,
         browser_pool=args.browser_pool,

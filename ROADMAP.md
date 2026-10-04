@@ -28,6 +28,7 @@ Planned improvements, in rough priority order.
 - [x] Configurable score weights
 - [x] Skill taxonomy with aliases (e.g. "Splunk ES" counts toward "SIEM")
 - [x] Structured seniority inference (`src/jobscraper/seniority.py`): explicit level ladder (intern/entry/mid/senior/staff/lead/manager/director/executive/unknown) with match evidence and confidence, from title markers, description signals, and required-experience bands; `--seniority` filter; level column in CSV/Excel/HTML exports
+- [x] Salary threshold filters (`src/jobscraper/salary.py`): `--min-salary` / `--max-salary` over normalized figures (e.g. `"80K USD"`, `"$200k"`, `"25 LPA"`; k/M suffixes; currency optional); min keeps postings whose range top reaches the amount, max keeps postings whose range bottom is at or below it; postings with no parsed salary are always kept as unknown; also exposed in the web GUI request model and options form
 
 ## Robustness
 - [x] Optional proxy rotation support (`--proxy`, `--proxies-file`, `JOBSCRAPER_PROXIES`; round-robin with failure parking)

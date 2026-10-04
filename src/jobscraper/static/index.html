@@ -129,6 +129,8 @@
       <div><label>Location filter</label><input type="text" id="opt-locfilter" placeholder="hyderabad"></div>
       <div><label>Keyword filter</label><input type="text" id="opt-kwfilter" placeholder="analyst, engineer"></div>
       <div><label>Minimum score</label><input type="number" id="opt-minscore" placeholder="65" min="0" max="100"></div>
+      <div><label>Min salary</label><input type="text" id="opt-minsalary" placeholder="80K USD"></div>
+      <div><label>Max salary</label><input type="text" id="opt-maxsalary" placeholder="200K USD"></div>
       <div><label>Exclude companies</label><input type="text" id="opt-excomp" placeholder="tcs, infosys"></div>
       <div><label>Exclude keywords</label><input type="text" id="opt-exkw" placeholder="intern, trainee"></div>
       <div><label>Workers</label><input type="number" id="opt-workers" value="4" min="1" max="16"></div>
@@ -184,6 +186,8 @@ $('runBtn').onclick = async () => {
     location_filter: $('opt-locfilter').value.trim() || null,
     keyword_filter: $('opt-kwfilter').value.trim() || null,
     min_score: $('opt-minscore').value === '' ? null : parseInt($('opt-minscore').value),
+    salary_min: $('opt-minsalary').value.trim() || null,
+    salary_max: $('opt-maxsalary').value.trim() || null,
     exclude_companies: $('opt-excomp').value.trim() || null,
     exclude_keywords: $('opt-exkw').value.trim() || null,
     workers: parseInt($('opt-workers').value) || 4,

@@ -105,6 +105,8 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--keyword-filter "A,B"` | keep only postings whose title contains a keyword |
 | `--min-score N` | keep only postings scoring N or higher (0-100) |
 | `--seniority LEVEL[,LEVEL]` | keep only postings at these seniority levels: `intern`, `entry`, `mid`, `senior`, `staff`, `lead`, `manager`, `director`, `executive`, `unknown` |
+| `--min-salary AMOUNT` | keep only postings whose salary range can reach AMOUNT (annual), e.g. `--min-salary "80K USD"` or `--min-salary "25 LPA"`; postings with no parsed salary are kept |
+| `--max-salary AMOUNT` | keep only postings whose salary range bottom is at or below AMOUNT (annual), e.g. `--max-salary "200K USD"`; postings with no parsed salary are kept |
 | `--out PATH` | JSON output path |
 | `--md PATH` | Markdown report path |
 | `--csv PATH` | CSV export path |
@@ -118,6 +120,19 @@ Pick the closest starting point in `examples/` (`security-engineer.json`, `softw
 | `--respect-robots` | honor robots.txt for every fetched URL (also via the `JOBSCRAPER_RESPECT_ROBOTS` env var) |
 | `--proxy URL` | proxy URL for all requests (repeatable; rotated round-robin) |
 | `--proxies-file PATH` | text file with one proxy URL per line (`#` comments allowed) |
+
+### Salary threshold filters
+
+`--min-salary` / `--max-salary` filter on the salary figures the scraper
+already normalizes (INR LPA, EUR, USD, GBP). A threshold is an annual
+amount plus a currency: `--min-salary "80K USD"`, `--max-salary "$200k"`,
+`--min-salary "25 LPA"` (lakh/LPA counts as INR). `k`/`M` suffixes are
+supported; the currency may be omitted (matches figures in any currency,
+documented as approximate in output). `--min-salary` keeps postings whose
+range *top* reaches the amount; `--max-salary` keeps postings whose range
+*bottom* is at or below it. Postings with no parsed salary figures are
+always kept: a missing salary is reported as unknown, never treated as
+proof the pay is too low or too high.
 
 ### Respecting robots.txt
 

@@ -65,6 +65,8 @@ class ScrapeRequest(BaseModel):
     exclude_companies: str | None = None
     exclude_keywords: str | None = None
     min_score: int | None = None
+    salary_min: str | None = None
+    salary_max: str | None = None
     workers: int = 4
     respect_robots: bool = False
 
@@ -131,6 +133,7 @@ def _run_job(job_id: str, urls: list[str], req: ScrapeRequest) -> None:
             exclude_companies=req.exclude_companies,
             exclude_keywords=req.exclude_keywords,
             min_score=req.min_score,
+            salary_min=req.salary_min, salary_max=req.salary_max,
             respect_robots=req.respect_robots,
             progress_cb=progress)
         payload = [p.to_dict() for p in results]

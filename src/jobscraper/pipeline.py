@@ -41,6 +41,7 @@ from jobscraper.rendering import (
     fetch_requests,
     set_default_pool,
 )
+from jobscraper.salary import meets_salary_threshold, parse_salary_threshold
 from jobscraper.scoring import posting_age_days, score_posting
 from jobscraper.seniority import LEVELS as SENIORITY_LEVELS
 from jobscraper.seniority import infer_seniority
@@ -115,6 +116,8 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
                  exclude_keywords: str | None = None,
                  min_score: int | None = None,
                  seniority: str | None = None,
+                 salary_min: str | None = None,
+                 salary_max: str | None = None,
                  watch_path: str | None = None,
                  respect_robots: bool = False,
                  browser_pool: bool = False,
@@ -173,7 +176,8 @@ def run_pipeline(urls: list[str], profile: dict | None = None,
         results = dedupe_results(results)
     results = apply_filters(results, location_filter, keyword_filter,
                             exclude_companies, exclude_keywords,
-                            seniority_filter=seniority)
+                            seniority_filter=seniority,
+                            salary_min=salary_min, salary_max=salary_max)
     if min_score is not None:
         results = [p for p in results
                    if p.error or (p.match and p.match.total >= min_score)]
@@ -192,21 +196,29 @@ def apply_filters(posts: list[Posting],
                   keyword_filter: str | None = None,
                   exclude_companies: str | None = None,
                   exclude_keywords: str | None = None,
-                  seniority_filter: str | None = None) -> list[Posting]:
+                  seniority_filter: str | None = None,
+                  salary_min: str | None = None,
+                  salary_max: str | None = None) -> list[Posting]:
     """Keep/drop postings by location, title keywords and exclusions.
 
     ``keyword_filter`` keeps titles containing any comma-separated keyword;
     ``exclude_companies``/``exclude_keywords`` drop matching companies/titles
     (all case-insensitive); ``seniority_filter`` keeps only postings whose
     inferred seniority level is in the comma-separated list (postings with
-    an unknown level are dropped unless ``unknown`` is listed). Errored
-    postings are always kept so failures stay visible.
+    an unknown level are dropped unless ``unknown`` is listed).
+    ``salary_min``/``salary_max`` are threshold specs like ``"80K USD"`` or
+    ``"25 LPA"``: postings whose salary range cannot reach the minimum (or
+    whose range bottom exceeds the maximum) are dropped, while postings
+    with no parsed salary figures are always kept. Errored postings are
+    always kept so failures stay visible.
     """
     keywords = _split_csv(keyword_filter)
     loc_filter = (location_filter or "").lower()
     ex_companies = _split_csv(exclude_companies)
     ex_keywords = _split_csv(exclude_keywords)
     seniority_levels = set(_split_csv(seniority_filter))
+    min_threshold = parse_salary_threshold(salary_min) if salary_min else None
+    max_threshold = parse_salary_threshold(salary_max) if salary_max else None
     unknown_levels = {lvl for lvl in seniority_levels
                       if lvl not in SENIORITY_LEVELS}
     if unknown_levels:
@@ -217,6 +229,8 @@ def apply_filters(posts: list[Posting],
     def keep(post: Posting) -> bool:
         if post.error:
             return True
+        if not meets_salary_threshold(post, min_threshold, max_threshold):
+            return False
         if seniority_levels and post.seniority not in seniority_levels:
             return False
         if loc_filter and loc_filter not in (post.location or "").lower():
